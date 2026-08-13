@@ -27,7 +27,7 @@
       },
       {
         "type": "tips",
-        "helpText": "dsh 是 DeepSeek 官方 agent 框架（DeepSeek Harness）。安装后通过 fnOS 桌面图标打开浏览器 UI（官方统一网关 /app/dsh），或局域网直连 http://<NAS_IP>:28000。"
+        "helpText": "dsh 是 DeepSeek 官方 agent 框架（DeepSeek Harness）。安装后通过 fnOS 桌面图标打开浏览器 UI（官方统一网关 /app/dsh），或局域网直连 http://<NAS_IP>:28000。\n若访问 GitHub/外部 API 超时，可填代理 IP + 端口（如 127.0.0.1:7890），将写入 /vol4/@appdata/dsh/dsh_home/proxy.conf（PROXY=http://IP:端口）。留空默认不走代理。"
       }
     ]
   }
