@@ -1,3 +1,26 @@
 #!/bin/bash
-# config_callback — no-op
+# config_callback — 保存 fnOS 应用设置页配置 (网络代理)
+# fnOS 设置页保存时运行. 字段为裸 env var (无 wizard_ 前缀, 与 install 向导不同).
+# 代理: 仅在填写了 proxy 时才更新 proxy.conf; 留空则保留当前值 (不置空).
+set -uo pipefail
+
+APP_NAME="${TRIM_APPNAME:-dsh}"
+DATA_DIR="${TRIM_PKGVAR:-/vol4/@appdata/${APP_NAME}}"
+LOG="${DATA_DIR}/config.log"
+DSH_HOME="${DATA_DIR}/dsh_home"
+
+mkdir -p "${DSH_HOME}" 2>/dev/null
+echo "[$(date '+%F %T')] config_callback start (user=$(id -un) uid=$(id -u)) proxy='${proxy:-}'" >> "${LOG}"
+
+# 更新代理: 仅当填写了 proxy 时才写 (留空保留当前 proxy.conf, 不置空)
+if [ -n "${proxy:-}" ]; then
+    printf 'PROXY=%s\n' "${proxy}" > "${DSH_HOME}/proxy.conf" 2>/dev/null
+    chmod 600 "${DSH_HOME}/proxy.conf" 2>/dev/null
+    chown "${APP_NAME:-dsh}:${APP_NAME:-dsh}" "${DSH_HOME}/proxy.conf" 2>/dev/null || true
+    echo "[$(date '+%F %T')] updated proxy.conf: ${proxy}" >> "${LOG}"
+else
+    echo "[$(date '+%F %T')] proxy empty; keep current proxy.conf" >> "${LOG}"
+fi
+
+echo "[$(date '+%F %T')] config_callback done" >> "${LOG}"
 exit 0
