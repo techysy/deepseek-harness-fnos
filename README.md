@@ -1,3 +1,5 @@
+<img width="1824" height="1080" alt="ScreenShot_2026-08-14_030331_743" src="https://github.com/user-attachments/assets/158168d3-e6a6-43ee-93c6-eab0ea46e44d" />
+
 # 🐳 DeepSeek Harness for fnOS
 
 [![上游版本](https://img.shields.io/badge/upstream-v0.1.0--rc.6-1E88E5?logo=deepseek&logoColor=white&label=DeepSeek%20Harness)](https://github.com/deepseek-ai/deepseek-harness)
@@ -31,6 +33,7 @@ fnOS
 4. 桌面打开 DSH 应用图标进入浏览器 UI
 
 > 依赖：fnOS 应用中心需已安装 **Node.js 24**（nodejs_v24，App Center 会自动安装依赖）。
+<img width="1802" height="1077" alt="ScreenShot_2026-08-14_024604_935" src="https://github.com/user-attachments/assets/42553a95-d341-4b7b-b8d9-a599fd4d6e29" />
 
 ## 🔧 配置
 
@@ -59,6 +62,7 @@ cd app/server
 # 2. 打包 fpk
 cd .. && fnpack build
 ```
+<img width="1763" height="1080" alt="ScreenShot_2026-08-14_030235_867" src="https://github.com/user-attachments/assets/30b6ab69-aa29-4c9f-875a-3e92b1a9a9d9" />
 
 ### 前置要求
 - **nodejs_v24**（依赖 `install_dep_apps`）
