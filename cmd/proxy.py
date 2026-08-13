@@ -4,8 +4,9 @@
 监听 Unix socket (${TRIM_APPDEST}/target/app.sock, 由 fnOS 统一网关转发),
 把 HTTP/WebSocket 请求反向代理到 127.0.0.1:DSH_PORT (dsh web).
 
-关键: dsh web 只绑 127.0.0.1 且拒绝 0.0.0.0 (安全: 防远程代码执行暴露).
-经 fnOS 官方统一网关 /app/dsh → app.sock → 本代理 → 127.0.0.1:dsh 访问.
+说明: dsh web 现经 cordis.patch.yml 覆盖 webserver 绑 0.0.0.0:DSH_PORT,
+局域网/Tailscale 可直接访问 NAS_IP:DSH_PORT; 本代理是可选的第二条入口,
+供经 fnOS 官方统一网关 /app/dsh → app.sock → 本代理 → 127.0.0.1:dsh 访问.
 
 重写 Host 头为 127.0.0.1:DSH_PORT, 规避 dsh web 的 browser-trust fence
 (它检查 Host 防 DNS rebinding; 只信任回环地址和 --trusted-host).
@@ -18,7 +19,7 @@ import struct
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-DSH_PORT = int(os.environ.get("DSH_PORT", "18080"))
+DSH_PORT = int(os.environ.get("DSH_PORT", "28000"))
 SOCK_PATH = os.environ.get("SOCK_PATH", "/tmp/dsh_app.sock")
 BACKEND = ("127.0.0.1", DSH_PORT)
 
