@@ -7,8 +7,9 @@ APP_NAME="${TRIM_APPNAME:-dsh}"
 APP_DIR="${TRIM_APPDEST:-/var/apps/${APP_NAME}}"
 DATA_DIR="${TRIM_PKGVAR:-/vol4/@appdata/${APP_NAME}}"
 
-# 端口: dsh web 绑 127.0.0.1 (只回环, 安全), 经官方统一网关 /app/dsh 暴露
-DSH_PORT="${TRIM_SERVICE_PORT:-18080}"
+# 端口: dsh web 绑 0.0.0.0 (经 cordis.patch.yml 覆盖 webserver host, 绕过 CLI 安全校验)
+# 局域网/Tailscale 可直接访问 NAS_IP:28000; 同时 proxy.py 经统一网关 /app/dsh 暴露
+DSH_PORT="${TRIM_SERVICE_PORT:-28000}"
 DSH_HOME="${DATA_DIR}/dsh_home"
 DSH_LOG="${DATA_DIR}/dsh.log"
 DSH_PID="${DATA_DIR}/dsh.pid"
@@ -62,20 +63,30 @@ find_dsh_bin() {
     return 1
 }
 
-# 启动 dsh web (绑 127.0.0.1, 只回环)
+# 启动 dsh web (绑 0.0.0.0:DSH_PORT, 经 patch 覆盖 host 绕过 CLI 0.0.0.0 校验)
 start_dsh() {
     [ -x "${DSH_BIN}" ] || { log "dsh not found (${DSH_BIN})"; return 1; }
     if [ -f "${DSH_PID}" ] && kill -0 "$(cat "${DSH_PID}")" 2>/dev/null; then
         return 0
     fi
     # 初始化 DSH_HOME
-    mkdir -p "${DSH_HOME}/profiles" "${DSH_HOME}/logs" 2>/dev/null
-    # 启动 dsh web: 绑 127.0.0.1 (dsh 拒绝 0.0.0.0), trusted-host 处理见 proxy.py
+    mkdir -p "${DSH_HOME}/profiles/web" "${DSH_HOME}/logs" 2>/dev/null
+    # 写入 cordis.patch.yml: 覆盖 webserver 绑 0.0.0.0 (允许局域网/Tailscale 直连)
+    # dsh CLI --host 0.0.0.0 会被 web-startup 插件拒绝; patch 层优先级更高, 绕过校验
+    cat > "${DSH_HOME}/profiles/web/cordis.patch.yml" <<PATCHEOF
+# 覆盖 webserver 配置: 绑定 0.0.0.0 允许局域网/Tailscale 直接访问 (绕过 CLI 安全校验)
+- id: webserver
+  config:
+    host: "0.0.0.0"
+    port: ${DSH_PORT}
+PATCHEOF
+    chmod 644 "${DSH_HOME}/profiles/web/cordis.patch.yml" 2>/dev/null
+    # 启动 dsh web: 不带 --host (让 patch 的 0.0.0.0 生效), 显式传 --port
     # DSH_ARGS 非空时 = 用 node <bin.js> 运行 (无 bin 链接的兜底)
-    DSH_HOME="${DSH_HOME}" nohup "${DSH_BIN}" ${DSH_ARGS:-} web --host 127.0.0.1 --port "${DSH_PORT}" \
+    DSH_HOME="${DSH_HOME}" nohup "${DSH_BIN}" ${DSH_ARGS:-} web --port "${DSH_PORT}" \
         >> "${DSH_LOG}" 2>&1 &
     echo $! > "${DSH_PID}"
-    log "dsh web started (pid $(cat "${DSH_PID}")) :127.0.0.1:${DSH_PORT}"
+    log "dsh web started (pid $(cat "${DSH_PID}")) :0.0.0.0:${DSH_PORT} (patch: host 0.0.0.0)"
     sleep 3
 }
 

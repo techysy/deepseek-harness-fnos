@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 1.0.5 (2026-08-13)
+- **局域网直连**：经 cordis.patch.yml 覆盖 webserver 绑 `0.0.0.0:28000`（绕过 CLI 0.0.0.0 安全校验），局域网/Tailscale 可直接访问 `NAS_IP:28000`
+- **service_port 改为 28000**（统一 dsh web 端口，含 patch 层）
+- **修复空白页**：proxy.py 重写 HTML 绝对资源路径 + 注入 `<base href="/app/dsh/">`，统一网关资源加载正常
+- **图标换黑色**：DeepSeek 官方黑色鲸鱼图标
+
 ## 1.0.4 (2026-08-13)
 - **修复 app/server native 模块兼容性**：在 NAS 上重新构建 app/server node_modules（node-pty/sharp/lightningcss/rolldown/oxc-parser 等原生模块改用 NAS glibc 2.36 环境 + g++ 现场编译），解决离线包在 Arch(glibc 2.42) 构建导致的 NAS 加载失败
 - install_callback 增加 **g++/build-essential 检测**：缺失时在 install.log 给出清晰提示（避免"安装成功但 dsh 起不来"的困惑）

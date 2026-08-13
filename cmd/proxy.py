@@ -88,6 +88,38 @@ def _relay(sock_a, sock_b):
     t1.join(); t2.join()
 
 
+# 统一网关前缀 (fnOS 以 /app/dsh 暴露, 需重写 HTML 里的绝对资源路径, 否则浏览器请求 /assets 丢前缀 404 → 空白页)
+GATEWAY_PREFIX = os.environ.get("GATEWAY_PREFIX", "/app/dsh")
+
+# 重写 HTML body: 把绝对资源路径 (/assets, /plugins, /manifest, /favicon) 加上统一网关前缀
+# 否则经 fnOS 统一网关 /app/dsh 访问时, 浏览器按绝对路径请求 /assets/... 丢失前缀 → 404 空白页
+def _rewrite_html(data: bytes) -> bytes:
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        return data
+    text = text.replace(
+        'src="/assets/', f'src="{GATEWAY_PREFIX}/assets/'
+    ).replace(
+        'href="/assets/', f'href="{GATEWAY_PREFIX}/assets/'
+    ).replace(
+        'href="/plugins/', f'href="{GATEWAY_PREFIX}/plugins/'
+    ).replace(
+        'src="/plugins/', f'src="{GATEWAY_PREFIX}/plugins/'
+    ).replace(
+        'href="/manifest.webmanifest', f'href="{GATEWAY_PREFIX}/manifest.webmanifest'
+    ).replace(
+        'href="/favicon', f'href="{GATEWAY_PREFIX}/favicon'
+    )
+    # 注入 <base> 兜底 (相对路径)
+    if text.startswith("<!doctype html") and "<base" not in text:
+        text = text.replace(
+            "<head>",
+            f"<head><base href=\"{GATEWAY_PREFIX}/\">", 1
+        )
+    return text.encode("utf-8")
+
+
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -116,6 +148,10 @@ class Handler(BaseHTTPRequestHandler):
                 return
             # 常规响应: 转发 body
             data = resp.read()
+            # 若是 HTML, 重写绝对资源路径 (加统一网关前缀), 避免空白页
+            ctype = resp.getheader("Content-Type", "").lower()
+            if "text/html" in ctype:
+                data = _rewrite_html(data)
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)
