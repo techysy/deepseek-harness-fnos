@@ -1,0 +1,24 @@
+#!/bin/bash
+# uninstall_init — 卸载前停止 dsh + proxy 进程
+set -uo pipefail
+APP_NAME="${TRIM_APPNAME:-dsh}"
+DATA_DIR="${TRIM_PKGVAR:-/vol4/@appdata/${APP_NAME}}"
+
+# 停 proxy
+if [ -f "${DATA_DIR}/proxy.pid" ]; then
+    PID=$(cat "${DATA_DIR}/proxy.pid")
+    kill "${PID}" 2>/dev/null || true
+    rm -f "${DATA_DIR}/proxy.pid"
+fi
+# 停 dsh web
+if [ -f "${DATA_DIR}/dsh.pid" ]; then
+    PID=$(cat "${DATA_DIR}/dsh.pid")
+    kill "${PID}" 2>/dev/null || true
+    sleep 2
+    kill -9 "${PID}" 2>/dev/null || true
+    rm -f "${DATA_DIR}/dsh.pid"
+fi
+# 兜底清理 dsh 进程
+pkill -f "dsh web" 2>/dev/null || true
+pkill -f "${DATA_DIR}/dsh_home" 2>/dev/null || true
+exit 0

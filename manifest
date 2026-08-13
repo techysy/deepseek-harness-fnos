@@ -1,8 +1,8 @@
 appname               = dsh
-version               = 1.0.0
+version               = 1.0.1
 display_name          = DSH
 desc                  = DeepSeek Harness — DeepSeek 官方 agent 浏览器 UI，本地常驻服务（官方统一网关接入）
-changelog             = 首个版本：dsh web 常驻 + 官方统一网关 /app/dsh
+changelog             = 补齐 9 个生命周期脚本，修复无效的包
 arch                  = x86_64
 source                = thirdparty
 maintainer            = techysy

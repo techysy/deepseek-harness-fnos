@@ -1,0 +1,3 @@
+#!/bin/bash
+# config_callback — no-op
+exit 0

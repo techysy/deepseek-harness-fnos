@@ -1,0 +1,11 @@
+#!/bin/bash
+# upgrade_callback — 升级 dsh
+set -uo pipefail
+APP_NAME="${TRIM_APPNAME:-dsh}"
+DATA_DIR="${TRIM_PKGVAR:-/vol4/@appdata/${APP_NAME}}"
+LOG="${DATA_DIR}/install.log"
+
+NPM=/usr/bin/npm
+[ -x /vol4/@appcenter/nodejs_v24/bin/npm ] && NPM=/vol4/@appcenter/nodejs_v24/bin/npm
+"${NPM}" install -g --upgrade @deepseek-ai/dsh >> "${LOG}" 2>&1 || true
+exit 0

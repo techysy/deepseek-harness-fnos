@@ -1,0 +1,9 @@
+#!/bin/bash
+# uninstall_callback — 清理运行时数据/日志
+set -uo pipefail
+APP_NAME="${TRIM_APPNAME:-dsh}"
+DATA_DIR="${TRIM_PKGVAR:-/vol4/@appdata/${APP_NAME}}"
+
+rm -f "${DATA_DIR}"/*.log "${DATA_DIR}"/*.pid 2>/dev/null || true
+rm -rf "${DATA_DIR}/dsh_home" 2>/dev/null || true
+exit 0

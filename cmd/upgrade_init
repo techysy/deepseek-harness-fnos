@@ -1,0 +1,3 @@
+#!/bin/bash
+# upgrade_init — no-op
+exit 0
