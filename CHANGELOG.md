@@ -1,5 +1,8 @@
 # CHANGELOG
 
+## 1.0.7 (2026-08-14)
+- **图标改用 dsh 运行时 favicon**（http://<NAS_IP>:28000/favicon.svg，DeepSeek 官方黑色鲸鱼）
+
 ## 1.0.6 (2026-08-14)
 - **桌面入口直接指向端口 28000**：app/ui/config 改为 `iframe + protocol http + port 28000`（不再用统一网关 /app/dsh），桌面图标直连
 - **发布者信息修正**：manifest maintainer_url / distributor_url 改为 https://github.com/techysy/deepseek-harness-fnos
