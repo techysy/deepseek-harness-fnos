@@ -1,0 +1,122 @@
+#!/bin/bash
+# cmd/main — DeepSeek Harness (dsh) fnOS 应用生命周期脚本
+# fnOS 生命周期: install 由 install_callback 处理; 本脚本处理 start/stop/status/restart
+set -uo pipefail
+
+APP_NAME="${TRIM_APPNAME:-dsh}"
+APP_DIR="${TRIM_APPDEST:-/var/apps/${APP_NAME}}"
+DATA_DIR="${TRIM_PKGVAR:-/vol4/@appdata/${APP_NAME}}"
+
+# 端口: dsh web 绑 127.0.0.1 (只回环, 安全), 经官方统一网关 /app/dsh 暴露
+DSH_PORT="${TRIM_SERVICE_PORT:-18080}"
+DSH_HOME="${DATA_DIR}/dsh_home"
+DSH_LOG="${DATA_DIR}/dsh.log"
+DSH_PID="${DATA_DIR}/dsh.pid"
+PROXY_LOG="${DATA_DIR}/proxy.log"
+PROXY_PID="${DATA_DIR}/proxy.pid"
+LOG="${DATA_DIR}/app.log"
+
+# 统一网关 Unix socket (gatewaySocket 声明 app.sock, 放 ${TRIM_APPDEST}/target/)
+SOCK_PATH="${APP_DIR}/target/app.sock"
+# 用 cmd/main 自身所在目录定位 proxy.py (同一目录), 兼容 fnOS 各种 TRIM_APPDEST
+CMD_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROXY_SRC="${CMD_DIR}/proxy.py"
+
+# dsh 可执行 + npm 路径
+DSH_BIN="$(command -v dsh 2>/dev/null || true)"
+NPM=/usr/bin/npm
+[ -x /vol4/@appcenter/nodejs_v24/bin/npm ] && NPM=/vol4/@appcenter/nodejs_v24/bin/npm
+[ -z "${DSH_BIN}" ] && DSH_BIN="/usr/local/bin/dsh"
+
+log() { echo "[$(date '+%F %T')] $*" >> "${LOG}"; }
+
+# 寻找 dsh 可执行 (含 nodejs runtime 路径)
+find_dsh_bin() {
+    local cand
+    for cand in "${DSH_BIN}" /vol4/@appcenter/nodejs_v24/bin/dsh /usr/local/bin/dsh /usr/bin/dsh; do
+        if [ -x "${cand}" ]; then
+            DSH_BIN="${cand}"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# 启动 dsh web (绑 127.0.0.1, 只回环)
+start_dsh() {
+    [ -x "${DSH_BIN}" ] || { log "dsh not found (${DSH_BIN})"; return 1; }
+    if [ -f "${DSH_PID}" ] && kill -0 "$(cat "${DSH_PID}")" 2>/dev/null; then
+        return 0
+    fi
+    # 初始化 DSH_HOME
+    mkdir -p "${DSH_HOME}/profiles" "${DSH_HOME}/logs" 2>/dev/null
+    # 启动 dsh web: 绑 127.0.0.1 (dsh 拒绝 0.0.0.0), trusted-host 处理见 proxy.py
+    DSH_HOME="${DSH_HOME}" nohup "${DSH_BIN}" web --host 127.0.0.1 --port "${DSH_PORT}" \
+        >> "${DSH_LOG}" 2>&1 &
+    echo $! > "${DSH_PID}"
+    log "dsh web started (pid $(cat "${DSH_PID}")) :127.0.0.1:${DSH_PORT}"
+    sleep 3
+}
+
+# 启动统一网关代理 (Unix socket → 127.0.0.1:DSH_PORT)
+start_proxy() {
+    [ -f "${PROXY_SRC}" ] || { log "proxy.py not found (${PROXY_SRC})"; return 0; }
+    if [ -f "${PROXY_PID}" ] && kill -0 "$(cat "${PROXY_PID}")" 2>/dev/null; then
+        return 0
+    fi
+    PY=/usr/bin/python3
+    DSH_PORT="${DSH_PORT}" SOCK_PATH="${SOCK_PATH}" \
+      nohup "${PY}" "${PROXY_SRC}" >> "${PROXY_LOG}" 2>&1 &
+    echo $! > "${PROXY_PID}"
+    log "proxy started (pid $(cat "${PROXY_PID}")) ${SOCK_PATH} -> 127.0.0.1:${DSH_PORT}"
+    sleep 1
+}
+
+start() {
+    mkdir -p "${DATA_DIR}" "${DSH_HOME}"
+    find_dsh_bin
+    start_dsh
+    start_proxy
+    # 健康检查
+    sleep 2
+    if [ -f "${DSH_PID}" ] && kill -0 "$(cat "${DSH_PID}")" 2>/dev/null; then
+        log "dsh health OK"
+        return 0
+    else
+        log "dsh failed to start (check ${DSH_LOG})"
+        return 1
+    fi
+}
+
+stop() {
+    # 停 proxy 再停 dsh
+    if [ -f "${PROXY_PID}" ]; then
+        kill "$(cat "${PROXY_PID}")" 2>/dev/null
+        rm -f "${PROXY_PID}"
+        log "proxy stopped"
+    fi
+    if [ -f "${DSH_PID}" ]; then
+        kill "$(cat "${DSH_PID}")" 2>/dev/null
+        rm -f "${DSH_PID}"
+        log "dsh web stopped"
+    fi
+    return 0
+}
+
+status() {
+    if [ -f "${DSH_PID}" ] && kill -0 "$(cat "${DSH_PID}")" 2>/dev/null; then
+        echo "dsh web: running (pid $(cat "${DSH_PID}"))"
+        return 0
+    else
+        echo "dsh web: stopped"
+        return 1
+    fi
+}
+
+case "${1:-}" in
+    start) start ;;
+    stop) stop ;;
+    status) status ;;
+    restart) stop; sleep 1; start ;;
+    *) echo "usage: $0 {start|stop|status|restart}"; exit 1 ;;
+esac

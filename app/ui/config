@@ -1,0 +1,14 @@
+{
+  ".url": {
+    "dsh.Application": {
+      "title": "DSH",
+      "icon": "images/icon_{0}.png",
+      "type": "iframe",
+      "protocol": "",
+      "gatewayPrefix": "/app/dsh",
+      "gatewaySocket": "app.sock",
+      "url": "/app/dsh",
+      "allUsers": true
+    }
+  }
+}

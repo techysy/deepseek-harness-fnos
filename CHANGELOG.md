@@ -1,0 +1,10 @@
+# CHANGELOG
+
+## 1.0.0 (2026-08-13)
+首个版本：DeepSeek Harness (dsh) fnOS 应用包。
+
+- **dsh web 常驻服务**：`dsh web` 绑 127.0.0.1:18080（DeepSeek Harness 浏览器 UI）
+- **飞牛官方统一网关接入**：`/app/dsh`（gatewaySocket: app.sock + gatewayPrefix），桌面图标入口
+- **统一网关代理**（proxy.py）：Unix socket → 127.0.0.1:18080，重写 Host 规避 dsh browser-trust
+- **安装向导**：DeepSeek API Key 配置
+- **依赖**：nodejs_v24 + `npm install -g @deepseek-ai/dsh`

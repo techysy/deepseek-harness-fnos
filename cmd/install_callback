@@ -1,0 +1,63 @@
+#!/bin/bash
+# install_callback — 安装 DeepSeek Harness (dsh) + 配置
+# 在线模式: npm install -g @deepseek-ai/dsh (fpk 小, 需联网 1-2 分钟)
+# 失败时记录日志但不阻断安装, cmd/main 会检测 dsh 并提示。
+set -uo pipefail
+
+APP_NAME="${TRIM_APPNAME:-dsh}"
+APP_DIR="${TRIM_APPDEST:-/var/apps/${APP_NAME}}"
+DATA_DIR="${TRIM_PKGVAR:-/vol4/@appdata/${APP_NAME}}"
+LOG="${DATA_DIR}/install.log"
+DSH_HOME="${DATA_DIR}/dsh_home"
+
+mkdir -p "${DATA_DIR}" "${DSH_HOME}"
+echo "[$(date '+%F %T')] install_callback start (user=$(id -un) uid=$(id -u))" >> "${LOG}"
+
+# ── 初始化 DSH_HOME (安装时提前创建, 避免启动时才建导致的权限/时序问题) ──
+init_dsh_home() {
+    # dsh 需要 DSH_HOME 目录; 若没有 profiles, 首启动时由 dsh 自动初始化
+    mkdir -p "${DSH_HOME}/profiles" "${DSH_HOME}/logs" 2>/dev/null
+    # 基础环境 (若不存在)
+    if [ ! -f "${DSH_HOME}/.env" ]; then
+        {
+            echo "DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}"
+        } > "${DSH_HOME}/.env" 2>/dev/null
+    fi
+    echo "[$(date '+%F %T')] dsh_home initialized at ${DSH_HOME}" >> "${LOG}"
+}
+
+# 保存安装向导传入的配置 (wizard_ 前缀) 到 .env
+if [ ! -f "${DSH_HOME}/.env" ] || [ -n "${wizard_deepseek_api_key:-}" ]; then
+    cat > "${DSH_HOME}/.env" <<EOF
+DEEPSEEK_API_KEY="${wizard_deepseek_api_key:-}"
+EOF
+    chmod 600 "${DSH_HOME}/.env"
+    echo "[$(date '+%F %T')] saved wizard config to .env" >> "${LOG}"
+fi
+
+# 已安装则跳过
+if [ -x "/usr/local/bin/dsh" ] || command -v dsh >/dev/null 2>&1; then
+    echo "[$(date '+%F %T')] dsh already installed, skip npm" >> "${LOG}"
+    init_dsh_home
+    exit 0
+fi
+
+# 在线安装 dsh
+echo "[$(date '+%F %T')] installing @deepseek-ai/dsh (may take 1-2 min)..."
+# 优先用 nodejs runtime 的 npm
+NPM=/usr/bin/npm
+[ -x /vol4/@appcenter/nodejs_v24/bin/npm ] && NPM=/vol4/@appcenter/nodejs_v24/bin/npm
+if "${NPM}" install -g @deepseek-ai/dsh >> "${LOG}" 2>&1; then
+    echo "[$(date '+%F %T')] dsh installed: $("${NPM}" ls -g @deepseek-ai/dsh 2>&1 | head -1)" >> "${LOG}"
+else
+    echo "[$(date '+%F %T')] direct install failed, trying proxy..." >> "${LOG}"
+    if "${NPM}" install -g --proxy http://127.0.0.1:7890 @deepseek-ai/dsh >> "${LOG}" 2>&1; then
+        echo "[$(date '+%F %T')] dsh installed via proxy" >> "${LOG}"
+    else
+        echo "[$(date '+%F %T')] ERROR: dsh install failed (check network). cmd/main will report." >> "${LOG}"
+    fi
+fi
+
+echo "[$(date '+%F %T')] install_callback done" >> "${LOG}"
+init_dsh_home
+exit 0

@@ -1,0 +1,16 @@
+appname               = dsh
+version               = 1.0.0
+display_name          = DSH
+desc                  = DeepSeek Harness — DeepSeek 官方 agent 浏览器 UI，本地常驻服务（官方统一网关接入）
+changelog             = 首个版本：dsh web 常驻 + 官方统一网关 /app/dsh
+arch                  = x86_64
+source                = thirdparty
+maintainer            = techysy
+maintainer_url        = https://github.com/techysy
+distributor           = techysy
+distributor_url       = https://github.com/techysy/dsh-fnos
+desktop_uidir         = ui
+desktop_applaunchname = dsh.Application
+service_port          = 18080
+ctl_stop              = true
+checkport             = false

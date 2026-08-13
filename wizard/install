@@ -1,0 +1,18 @@
+[
+  {
+    "stepTitle": "DeepSeek Harness 配置",
+    "items": [
+      {
+        "type": "password",
+        "field": "wizard_deepseek_api_key",
+        "label": "DeepSeek API Key",
+        "initValue": "",
+        "tip": "DeepSeek 开放平台的 API Key（sk- 开头）。留空可在应用内配置。dsh 需要 DeepSeek API 才能对话。"
+      },
+      {
+        "type": "tips",
+        "helpText": "dsh 是 DeepSeek 官方 agent 框架（DeepSeek Harness）。安装后通过 fnOS 桌面图标打开浏览器 UI（官方统一网关 /app/dsh）。"
+      }
+    ]
+  }
+]
