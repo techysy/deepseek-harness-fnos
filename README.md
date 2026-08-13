@@ -1,19 +1,22 @@
-# DSH for fnOS
+# DeepSeek Harness for fnOS
 
-DeepSeek Harness（dsh）— DeepSeek 官方 agent 框架的浏览器 UI，打包成飞牛 fnOS 应用。本地常驻服务，经飞牛官方统一网关接入。
+DeepSeek Harness（dsh）— DeepSeek 官方 agent 框架的浏览器 UI，打包成飞牛 fnOS 应用。
+
+- **上游项目**：[deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness)（DeepSeek 官方，v0.1.0-rc.6）
+- **飞牛打包版**：[techysy/deepseek-harness-fnos](https://github.com/techysy/deepseek-harness-fnos)
 
 ## 🏗️ 架构
 
 ```
 fnOS
-└── DSH
-    ├── dsh web (127.0.0.1:18080)  ← DeepSeek Harness 浏览器 UI (只绑回环, 安全)
-    └── 统一网关代理 (app.sock)      ← Python proxy, 把 /app/dsh 转发到 127.0.0.1:18080
+└── DeepSeek Harness (dsh)
+    ├── dsh web (0.0.0.0:28000)   ← DeepSeek Harness 浏览器 UI (patch 覆盖 webserver 绑 0.0.0.0)
+    └── proxy.py (app.sock)        ← 可选: 经 fnOS 统一网关 /app/dsh 转发到 127.0.0.1:28000
 ```
 
-- **桌面图标 → 打开 DeepSeek Harness 浏览器 UI**（官方统一网关 `/app/dsh`）
-- **dsh web 只绑 127.0.0.1**（dsh 安全限制：拒绝 0.0.0.0，防远程代码执行暴露）
-- **飞牛官方统一网关**：`gatewaySocket: app.sock` + `gatewayPrefix: /app/dsh`，fnOS 校验会话 + 转发到 Unix socket，Python proxy 再转发到 dsh web
+- **桌面图标 → 打开 DeepSeek Harness 浏览器 UI**（直连 `127.0.0.1:28000`）
+- **局域网/Tailscale → 直接访问 `http://<NAS_IP>:28000`**
+- **dsh 绑 0.0.0.0**：通过 `cordis.patch.yml` 覆盖 webserver 配置绕过 CLI 的 0.0.0.0 安全校验（dsh CLI `--host 0.0.0.0` 会被拒绝）
 - **离线打包**：dsh（含 node_modules）随 fpk 内置在 `app/server`，安装免联网
 
 ## 🚀 安装
@@ -37,8 +40,8 @@ fnOS
 ### 端口
 | 服务 | 端口/路径 | 说明 |
 |------|-----------|------|
-| dsh web | 127.0.0.1:18080 | DeepSeek Harness 浏览器 UI（只回环）|
-| 统一网关 | /app/dsh | fnOS 桌面图标入口 |
+| dsh web | 0.0.0.0:28000 | DeepSeek Harness 浏览器 UI（局域网直连）|
+| 桌面入口 | 127.0.0.1:28000 | fnOS 桌面图标（iframe 直连）|
 
 ## 🛠️ 从源码打包
 
@@ -61,7 +64,12 @@ cd .. && fnpack build
   ```
   > install_callback 会在缺失 g++ 时于 install.log 给出提示。
 
-## 📋 已知限制
+## 📋 已知限制与安全
 
-- dsh web 只能绑 127.0.0.1（官方安全限制），因此只能经官方统一网关访问，不能直接用 IP:端口
+- **dsh 绑 0.0.0.0** 意味着局域网内都能访问 `http://<NAS_IP>:28000`，且 dsh 能执行代码——**注意网络安全**，必要时用 `trusted-host` 配置或防火墙限制网段
 - `app/server/node_modules` 需在 **NAS 的 glibc 环境**编译（在 Arch/高版本 glibc 编译的原生模块不兼容 NAS，报 `GLIBC_2.42 not found`）
+- 应用走 **fnOS 生命周期**管理（appcenter-cli / 应用中心以 `dsh` 用户调度），不要手动 `sudo node` 启动
+
+## 📝 版本历史
+
+见 [CHANGELOG.md](CHANGELOG.md)
