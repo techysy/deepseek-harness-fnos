@@ -71,6 +71,15 @@ start_dsh() {
     fi
     # 初始化 DSH_HOME
     mkdir -p "${DSH_HOME}/profiles/web" "${DSH_HOME}/logs" 2>/dev/null
+    # dsh 用 os.homedir() 作为工作目录, 默认 /home/dsh 不存在会导致 ENOENT.
+    # 确保存在且可写, 并把 HOME 指向 DSH_HOME (数据区, 可持久).
+    if [ "${HOME:-}" != "${DSH_HOME}" ]; then
+        export HOME="${DSH_HOME}"
+    fi
+    mkdir -p "${HOME}" 2>/dev/null
+    if [ -n "${TRIM_PKGVAR:-}" ]; then
+        mkdir -p "/home/${APP_NAME}" 2>/dev/null || true
+    fi
     # 写入 cordis.patch.yml: 覆盖 webserver 绑 0.0.0.0 (允许局域网/Tailscale 直连)
     # dsh CLI --host 0.0.0.0 会被 web-startup 插件拒绝; patch 层优先级更高, 绕过校验
     cat > "${DSH_HOME}/profiles/web/cordis.patch.yml" <<PATCHEOF
@@ -81,12 +90,22 @@ start_dsh() {
     port: ${DSH_PORT}
 PATCHEOF
     chmod 644 "${DSH_HOME}/profiles/web/cordis.patch.yml" 2>/dev/null
-    # 启动 dsh web: 不带 --host (让 patch 的 0.0.0.0 生效), 显式传 --port
+    # 构建 /api browser-trust fence 的 trusted-host 列表:
+    # dsh 只信任回环地址或 --trusted-host 声明的 authority, 否则局域网访问 API 全 403.
+    # 把本机所有非回环 IPv4 (局域网/Tailscale 等) 都加入信任, 允许从这些地址直连访问 API.
+    TRUSTED_HOST_ARGS=""
+    LAN_IPS="$(ip -4 addr show 2>/dev/null | grep -oE 'inet [0-9.]+' | awk '{print $2}' | grep -v '^127\.' || true)"
+    for ip in ${LAN_IPS}; do
+        TRUSTED_HOST_ARGS="${TRUSTED_HOST_ARGS} --trusted-host ${ip}"
+    done
+    # 兜底: 若未探测到, 至少信任回环
+    [ -z "${TRUSTED_HOST_ARGS}" ] && TRUSTED_HOST_ARGS="--trusted-host 127.0.0.1"
+    # 启动 dsh web: 不带 --host (让 patch 的 0.0.0.0 生效), 显式传 --port + trusted-host
     # DSH_ARGS 非空时 = 用 node <bin.js> 运行 (无 bin 链接的兜底)
-    DSH_HOME="${DSH_HOME}" nohup "${DSH_BIN}" ${DSH_ARGS:-} web --port "${DSH_PORT}" \
+    DSH_HOME="${DSH_HOME}" nohup "${DSH_BIN}" ${DSH_ARGS:-} web --port "${DSH_PORT}" ${TRUSTED_HOST_ARGS} \
         >> "${DSH_LOG}" 2>&1 &
     echo $! > "${DSH_PID}"
-    log "dsh web started (pid $(cat "${DSH_PID}")) :0.0.0.0:${DSH_PORT} (patch: host 0.0.0.0)"
+    log "dsh web started (pid $(cat "${DSH_PID}")) :0.0.0.0:${DSH_PORT} (patch: host 0.0.0.0) trusted-host:${LAN_IPS}"
     sleep 3
 }
 

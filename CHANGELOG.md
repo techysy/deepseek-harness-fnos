@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 1.0.10 (2026-08-14)
+- **修复设置页 API 403**：放宽 dsh 特权 API（settings.describe 等）回环钉扎，允许局域网可信来源访问模型/插件/Agent 预设配置
+- 注意：飞牛移动 App 容器（WebView）有固有限制（SameSite cookie/localStorage/跨源），dsh 复杂前端建议用手机浏览器（Chrome/飞书）访问
+
+## 1.0.9 (2026-08-14)
+- **修复局域网 API 403**：cmd/main 启动 dsh 时动态探测局域网 IP 并加 `--trusted-host`，让 /api 浏览器信任围栏放行局域网访问（此前所有 API 403）
+- **修复 /home/dsh ENOENT**：cmd/main 设置 HOME=DSH_HOME（数据区）+ 确保目录存在
+- **修复 crypto.randomUUID is not a function**：前端 index.html + 39 个 client.js 注入 polyfill（非安全上下文可用）
+- **内置 DeepSeek API Key 初始化提示**：首次需在安装向导或 .env 配置
+
 ## 1.0.8 (2026-08-14)
 - **显示名修正**：app/ui/config 入口 title 从 "DSH" 改为 "DeepSeek Harness"（应用中心/桌面图标显示全名）
 
