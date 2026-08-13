@@ -41,6 +41,15 @@ else
     echo "[$(date '+%F %T')] offline dsh package OK: ${DSH_OFFLINE}" >> "${LOG}"
 fi
 
+# ── 检测 g++/编译工具链 (node-pty 等 native 模块如需重建时依赖) ──
+# dsh 含原生模块 (node-pty 等), 若离线包在低 glibc 环境构建且 NAS 需要重建, 缺 g++ 会静默失败.
+# 这里主动检测并在缺失时给出清晰提示, 避免"安装成功但 dsh 起不来"的困惑.
+if command -v g++ >/dev/null 2>&1; then
+    echo "[$(date '+%F %T')] build-essential OK: g++ $(g++ --version 2>/dev/null | head -1)" >> "${LOG}"
+else
+    echo "[$(date '+%F %T')] WARN: g++ NOT FOUND — 若 dsh 的 node-pty 等原生模块需在 NAS 重建编译, 请先安装 build-essential:  ssh 到 NAS 执行 'sudo apt install -y build-essential'。" >> "${LOG}"
+fi
+
 echo "[$(date '+%F %T')] install_callback done" >> "${LOG}"
 init_dsh_home
 exit 0
