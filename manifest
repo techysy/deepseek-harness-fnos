@@ -14,3 +14,4 @@ desktop_applaunchname = dsh.Application
 service_port          = 18080
 ctl_stop              = true
 checkport             = false
+install_dep_apps      = nodejs_v24
