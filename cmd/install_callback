@@ -44,11 +44,18 @@ fi
 
 # 在线安装 dsh
 echo "[$(date '+%F %T')] installing @deepseek-ai/dsh (may take 1-2 min)..."
-# 优先用 nodejs runtime 的 npm
+# 优先用 nodejs runtime 的 npm; npm 脚本用 /usr/bin/env node, 必须把 nodejs_v24 bin 加入 PATH
 NPM=/usr/bin/npm
-[ -x /vol4/@appcenter/nodejs_v24/bin/npm ] && NPM=/vol4/@appcenter/nodejs_v24/bin/npm
+if [ -x /vol4/@appcenter/nodejs_v24/bin/npm ]; then
+    NPM=/vol4/@appcenter/nodejs_v24/bin/npm
+    export PATH="/vol4/@appcenter/nodejs_v24/bin:${PATH}"
+fi
+# 兜底: 若 npm 仍找不到 node, 用符号链接
+if ! command -v node >/dev/null 2>&1 && [ -x /vol4/@appcenter/nodejs_v24/bin/node ]; then
+    ln -sf /vol4/@appcenter/nodejs_v24/bin/node /usr/local/bin/node 2>/dev/null || true
+fi
 if "${NPM}" install -g @deepseek-ai/dsh >> "${LOG}" 2>&1; then
-    echo "[$(date '+%F %T')] dsh installed: $("${NPM}" ls -g @deepseek-ai/dsh 2>&1 | head -1)" >> "${LOG}"
+    echo "[$(date '+%F %T')] dsh installed" >> "${LOG}"
 else
     echo "[$(date '+%F %T')] direct install failed, trying proxy..." >> "${LOG}"
     if "${NPM}" install -g --proxy http://127.0.0.1:7890 @deepseek-ai/dsh >> "${LOG}" 2>&1; then
@@ -56,6 +63,26 @@ else
     else
         echo "[$(date '+%F %T')] ERROR: dsh install failed (check network). cmd/main will report." >> "${LOG}"
     fi
+fi
+
+# npm 全局安装可能没在 nodejs_v24/bin 创建 dsh 链接 (dsh 用户无写权限)
+# 手动创建 bin 链接; 失败则依赖 cmd/main 用 node 直接运行
+DSH_BIN="$(command -v dsh 2>/dev/null || true)"
+if [ -z "${DSH_BIN}" ] && [ -f "/vol4/@appcenter/nodejs_v24/lib/node_modules/@deepseek-ai/dsh/lib/bin.js" ]; then
+    # 尝试创建 bin 链接 (可能因权限失败, 失败也没关系, cmd/main 会用 node 运行)
+    mkdir -p /usr/local/bin 2>/dev/null
+    cat > /usr/local/bin/dsh <<'EOF'
+#!/bin/bash
+# dsh launcher - 定位 nodejs_v24 的 dsh 包用 node 运行
+for NODE in /vol4/@appcenter/nodejs_v24/bin/node /var/apps/nodejs_v24/target/bin/node /usr/bin/node; do
+    [ -x "$NODE" ] && break
+done
+DSH_JS="/vol4/@appcenter/nodejs_v24/lib/node_modules/@deepseek-ai/dsh/lib/bin.js"
+[ -f "$DSH_JS" ] || DSH_JS="$(dirname "$(readlink -f "$0")")/../lib/node_modules/@deepseek-ai/dsh/lib/bin.js"
+exec "$NODE" "$DSH_JS" "$@"
+EOF
+    chmod +x /usr/local/bin/dsh 2>/dev/null
+    echo "[$(date '+%F %T')] created dsh launcher at /usr/local/bin/dsh" >> "${LOG}"
 fi
 
 echo "[$(date '+%F %T')] install_callback done" >> "${LOG}"

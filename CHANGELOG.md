@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 1.0.2 (2026-08-13)
+- 应用名改为 **DeepSeek Harness**
+- 图标换成 **DeepSeek 官方图标**
+- 修复 node PATH（npm install 找不到 node）+ socket 目录
+
 ## 1.0.1 (2026-08-13)
 修复"无效的包"：补齐 9 个 fnOS 生命周期脚本（config_init/callback、install_init、uninstall_init/callback、upgrade_init/callback），修复 config/resource 括号格式。
 

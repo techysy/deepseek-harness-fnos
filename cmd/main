@@ -16,8 +16,11 @@ PROXY_LOG="${DATA_DIR}/proxy.log"
 PROXY_PID="${DATA_DIR}/proxy.pid"
 LOG="${DATA_DIR}/app.log"
 
-# 统一网关 Unix socket (gatewaySocket 声明 app.sock, 放 ${TRIM_APPDEST}/target/)
-SOCK_PATH="${APP_DIR}/target/app.sock"
+# 统一网关 Unix socket (gatewaySocket 声明 app.sock, 放 target 目录)
+# /var/apps/<App>/target 是指向 @appcenter/<App> 的软链 (存在); TRIM_APPDEST 本身无 target 子目录
+SOCK_PATH="${TRIM_APPDEST_SOCK:-/var/apps/${APP_NAME}/target/app.sock}"
+# 确保 socket 目录存在 (target 软链指向 @appcenter, 属主为 dsh 用户可写)
+mkdir -p "$(dirname "${SOCK_PATH}")" 2>/dev/null || true
 # 用 cmd/main 自身所在目录定位 proxy.py (同一目录), 兼容 fnOS 各种 TRIM_APPDEST
 CMD_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROXY_SRC="${CMD_DIR}/proxy.py"
@@ -26,11 +29,18 @@ PROXY_SRC="${CMD_DIR}/proxy.py"
 DSH_BIN="$(command -v dsh 2>/dev/null || true)"
 NPM=/usr/bin/npm
 [ -x /vol4/@appcenter/nodejs_v24/bin/npm ] && NPM=/vol4/@appcenter/nodejs_v24/bin/npm
-[ -z "${DSH_BIN}" ] && DSH_BIN="/usr/local/bin/dsh"
+NODE_BIN=""
+for cand in /vol4/@appcenter/nodejs_v24/bin/node /var/apps/nodejs_v24/target/bin/node /usr/bin/node; do
+    [ -x "$cand" ] && NODE_BIN="$cand" && break
+done
+DSH_JS=""
+for cand in /vol4/@appcenter/nodejs_v24/lib/node_modules/@deepseek-ai/dsh/lib/bin.js /usr/local/lib/node_modules/@deepseek-ai/dsh/lib/bin.js; do
+    [ -f "$cand" ] && DSH_JS="$cand" && break
+done
 
 log() { echo "[$(date '+%F %T')] $*" >> "${LOG}"; }
 
-# 寻找 dsh 可执行 (含 nodejs runtime 路径)
+# 寻找 dsh 可执行; 无 bin 链接时用 node 直接运行 dsh 的 bin.js
 find_dsh_bin() {
     local cand
     for cand in "${DSH_BIN}" /vol4/@appcenter/nodejs_v24/bin/dsh /usr/local/bin/dsh /usr/bin/dsh; do
@@ -39,6 +49,12 @@ find_dsh_bin() {
             return 0
         fi
     done
+    # 兜底: 用 node 运行 dsh 的 bin.js
+    if [ -x "${NODE_BIN}" ] && [ -n "${DSH_JS}" ] && [ -f "${DSH_JS}" ]; then
+        DSH_BIN="${NODE_BIN}"
+        DSH_ARGS="${DSH_JS}"
+        return 0
+    fi
     return 1
 }
 
@@ -51,7 +67,8 @@ start_dsh() {
     # 初始化 DSH_HOME
     mkdir -p "${DSH_HOME}/profiles" "${DSH_HOME}/logs" 2>/dev/null
     # 启动 dsh web: 绑 127.0.0.1 (dsh 拒绝 0.0.0.0), trusted-host 处理见 proxy.py
-    DSH_HOME="${DSH_HOME}" nohup "${DSH_BIN}" web --host 127.0.0.1 --port "${DSH_PORT}" \
+    # DSH_ARGS 非空时 = 用 node <bin.js> 运行 (无 bin 链接的兜底)
+    DSH_HOME="${DSH_HOME}" nohup "${DSH_BIN}" ${DSH_ARGS:-} web --host 127.0.0.1 --port "${DSH_PORT}" \
         >> "${DSH_LOG}" 2>&1 &
     echo $! > "${DSH_PID}"
     log "dsh web started (pid $(cat "${DSH_PID}")) :127.0.0.1:${DSH_PORT}"
