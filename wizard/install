@@ -11,10 +11,19 @@
       },
       {
         "type": "text",
-        "field": "wizard_proxy",
-        "label": "网络代理（可选）",
+        "field": "wizard_proxy_ip",
+        "label": "代理 IP（可选）",
         "initValue": "",
-        "tip": "如访问 GitHub/外部 API 超时，可填 HTTP 代理，例如 http://127.0.0.1:7890（mihomo/Clash）或 http://127.0.0.1:20128（9Router）。留空则默认不走代理。"
+        "placeholder": "127.0.0.1",
+        "tip": "HTTP 代理的 IP（如 mihomo/Clash 的 127.0.0.1）。如访问 GitHub 超时可填，留空默认不走代理。"
+      },
+      {
+        "type": "text",
+        "field": "wizard_proxy_port",
+        "label": "代理端口（可选）",
+        "initValue": "",
+        "placeholder": "7890",
+        "tip": "HTTP 代理的端口（如 mihomo 7890、9Router 20128）。需与代理 IP 一起填。"
       },
       {
         "type": "tips",

@@ -34,12 +34,12 @@ EOF
     echo "[$(date '+%F %T')] saved wizard config to .env" >> "${LOG}"
 fi
 
-# 保存安装向导填的代理到 proxy.conf (留空则不创建, 默认不走代理)
-if [ -n "${wizard_proxy:-}" ]; then
-    printf 'PROXY=%s\n' "${wizard_proxy}" > "${DSH_HOME}/proxy.conf" 2>/dev/null
+# 保存安装向导填的代理到 proxy.conf (IP+端口拼成 http://IP:port; 都填才写, 留空默认不走代理)
+if [ -n "${wizard_proxy_ip:-}" ] && [ -n "${wizard_proxy_port:-}" ]; then
+    printf 'PROXY=http://%s:%s\n' "${wizard_proxy_ip}" "${wizard_proxy_port}" > "${DSH_HOME}/proxy.conf" 2>/dev/null
     chmod 600 "${DSH_HOME}/proxy.conf" 2>/dev/null
     chown "${APP_NAME:-dsh}:${APP_NAME:-dsh}" "${DSH_HOME}/proxy.conf" 2>/dev/null || true
-    echo "[$(date '+%F %T')] saved wizard proxy to proxy.conf: ${wizard_proxy}" >> "${LOG}"
+    echo "[$(date '+%F %T')] saved wizard proxy to proxy.conf: http://${wizard_proxy_ip}:${wizard_proxy_port}" >> "${LOG}"
 fi
 
 # 检查离线 dsh 包是否存在 (随 fpk 打包)

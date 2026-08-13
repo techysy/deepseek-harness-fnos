@@ -4,15 +4,23 @@
     "items": [
       {
         "type": "text",
-        "field": "proxy",
-        "label": "网络代理（可选）",
-        "placeholder": "http://127.0.0.1:7890",
+        "field": "proxy_ip",
+        "label": "代理 IP",
+        "placeholder": "127.0.0.1",
         "initValue": "",
-        "desc": "如访问 GitHub/外部 API 超时，可填 HTTP 代理（mihomo/Clash 7890 或 9Router 20128）。留空则保留当前设置。改后需重启应用生效。"
+        "desc": "HTTP 代理的 IP（如 mihomo/Clash 的 127.0.0.1，或 9Router）。留空保留当前设置。"
+      },
+      {
+        "type": "text",
+        "field": "proxy_port",
+        "label": "代理端口",
+        "placeholder": "7890",
+        "initValue": "",
+        "desc": "HTTP 代理的端口（如 mihomo 7890、9Router 20128）。"
       },
       {
         "type": "tips",
-        "helpText": "代理写入 /vol4/@appdata/dsh/dsh_home/proxy.conf（PROXY=http://...）。留空不会清空当前代理。修改后重启 dsh 应用生效。"
+        "helpText": "代理写入 /vol4/@appdata/dsh/dsh_home/proxy.conf（PROXY=http://IP:端口）。留空不会清空当前代理设置，修改后重启 dsh 应用生效。"
       }
     ]
   }
