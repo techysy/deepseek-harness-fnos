@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 1.0.6 (2026-08-14)
+- **桌面入口直接指向端口 28000**：app/ui/config 改为 `iframe + protocol http + port 28000`（不再用统一网关 /app/dsh），桌面图标直连
+- **发布者信息修正**：manifest maintainer_url / distributor_url 改为 https://github.com/techysy/deepseek-harness-fnos
+
 ## 1.0.5 (2026-08-13)
 - **局域网直连**：经 cordis.patch.yml 覆盖 webserver 绑 `0.0.0.0:28000`（绕过 CLI 0.0.0.0 安全校验），局域网/Tailscale 可直接访问 `NAS_IP:28000`
 - **service_port 改为 28000**（统一 dsh web 端口，含 patch 层）
