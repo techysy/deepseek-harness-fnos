@@ -1,8 +1,8 @@
 appname               = dsh
-version               = 1.0.11
+version               = 1.0.12
 display_name          = DeepSeek Harness
 desc                  = DeepSeek Harness — DeepSeek 官方 agent 浏览器 UI（上游 deepseek-ai/deepseek-harness 0.1.0-rc.6），本地常驻服务，打包为飞牛 fnOS 应用
-changelog             = 开发者信息改为 DeepSeek
+changelog             = 安装向导可填网络代理 + 默认不走代理
 arch                  = x86_64
 source                = thirdparty
 maintainer            = DeepSeek

@@ -80,6 +80,21 @@ start_dsh() {
     if [ -n "${TRIM_PKGVAR:-}" ]; then
         mkdir -p "/home/${APP_NAME}" 2>/dev/null || true
     fi
+    # 网络代理: 默认不走代理. 仅当用户在 ${DSH_HOME}/proxy.conf 显式配置了 PROXY 才走代理.
+    # proxy.conf 内容示例:  PROXY=http://127.0.0.1:7890   (HTTP_PROXY/HTTPS_PROXY 都指向它)
+    if [ -z "${HTTP_PROXY:-}" ] && [ -z "${http_proxy:-}" ]; then
+        if [ -f "${DSH_HOME}/proxy.conf" ]; then
+            CFG_PROXY="$(grep -E '^PROXY=' "${DSH_HOME}/proxy.conf" | head -1 | cut -d= -f2-)"
+            if [ -n "${CFG_PROXY}" ]; then
+                export HTTP_PROXY="${CFG_PROXY}" HTTPS_PROXY="${CFG_PROXY}" http_proxy="${CFG_PROXY}" https_proxy="${CFG_PROXY}" ALL_PROXY="${CFG_PROXY}" all_proxy="${CFG_PROXY}"
+                git config --global http.proxy "${CFG_PROXY}" 2>/dev/null
+                git config --global https.proxy "${CFG_PROXY}" 2>/dev/null
+                log "network proxy from proxy.conf: ${CFG_PROXY}"
+            else
+                log "proxy.conf present but no PROXY= line; default no-proxy"
+            fi
+        fi
+    fi
     # 写入 cordis.patch.yml: 覆盖 webserver 绑 0.0.0.0 (允许局域网/Tailscale 直连)
     # dsh CLI --host 0.0.0.0 会被 web-startup 插件拒绝; patch 层优先级更高, 绕过校验
     cat > "${DSH_HOME}/profiles/web/cordis.patch.yml" <<PATCHEOF

@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 1.0.12 (2026-08-14)
+- **安装向导可填网络代理**：wizard 加"网络代理（可选）"输入项，填了会写入 `DSH_HOME/proxy.conf`，dsh 网络请求（git/npm/API）走该代理
+- **默认不走代理**：proxy.conf 不存在时不设置代理，仅用户配置时才走代理
+- 需代理时也可手动编辑 `/vol4/@appdata/dsh/dsh_home/proxy.conf`（`PROXY=http://127.0.0.1:7890`）
+
 ## 1.0.11 (2026-08-14)
 - **开发者信息修正**：manifest maintainer 改为 **DeepSeek**（上游 deepseek-ai/deepseek-harness），distributor 保持 techysy/deepseek-harness-fnos
 

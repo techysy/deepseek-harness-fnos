@@ -7,11 +7,18 @@
         "field": "wizard_deepseek_api_key",
         "label": "DeepSeek API Key",
         "initValue": "",
-        "tip": "DeepSeek 开放平台的 API Key（sk- 开头）。留空可在应用内配置。dsh 需要 DeepSeek API 才能对话。"
+        "tip": "DeepSeek 开放平台的 API Key（sk- 开头）。可选，留空可在应用内配置。dsh 需要 DeepSeek API 才能对话。"
+      },
+      {
+        "type": "text",
+        "field": "wizard_proxy",
+        "label": "网络代理（可选）",
+        "initValue": "",
+        "tip": "如访问 GitHub/外部 API 超时，可填 HTTP 代理，例如 http://127.0.0.1:7890（mihomo/Clash）或 http://127.0.0.1:20128（9Router）。留空则默认不走代理。"
       },
       {
         "type": "tips",
-        "helpText": "dsh 是 DeepSeek 官方 agent 框架（DeepSeek Harness）。安装后通过 fnOS 桌面图标打开浏览器 UI（官方统一网关 /app/dsh）。"
+        "helpText": "dsh 是 DeepSeek 官方 agent 框架（DeepSeek Harness）。安装后通过 fnOS 桌面图标打开浏览器 UI（官方统一网关 /app/dsh），或局域网直连 http://<NAS_IP>:28000。"
       }
     ]
   }
