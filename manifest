@@ -1,8 +1,8 @@
 appname               = dsh
-version               = 1.0.7
+version               = 1.0.8
 display_name          = DeepSeek Harness
 desc                  = DeepSeek Harness — DeepSeek 官方 agent 浏览器 UI（上游 deepseek-ai/deepseek-harness 0.1.0-rc.6），本地常驻服务，打包为飞牛 fnOS 应用
-changelog             = 图标改用 dsh favicon (黑色鲸鱼)
+changelog             = 显示名修正为 DeepSeek Harness
 arch                  = x86_64
 source                = thirdparty
 maintainer            = techysy

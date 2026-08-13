@@ -1,7 +1,7 @@
 {
   ".url": {
     "dsh.Application": {
-      "title": "DSH",
+      "title": "DeepSeek Harness",
       "icon": "images/icon_{0}.png",
       "type": "iframe",
       "protocol": "http",

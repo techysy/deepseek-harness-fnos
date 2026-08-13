@@ -1,5 +1,8 @@
 # CHANGELOG
 
+## 1.0.8 (2026-08-14)
+- **显示名修正**：app/ui/config 入口 title 从 "DSH" 改为 "DeepSeek Harness"（应用中心/桌面图标显示全名）
+
 ## 1.0.7 (2026-08-14)
 - **图标改用 dsh 运行时 favicon**（http://<NAS_IP>:28000/favicon.svg，DeepSeek 官方黑色鲸鱼）
 
