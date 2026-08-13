@@ -14,13 +14,16 @@ fnOS
 - **桌面图标 → 打开 DeepSeek Harness 浏览器 UI**（官方统一网关 `/app/dsh`）
 - **dsh web 只绑 127.0.0.1**（dsh 安全限制：拒绝 0.0.0.0，防远程代码执行暴露）
 - **飞牛官方统一网关**：`gatewaySocket: app.sock` + `gatewayPrefix: /app/dsh`，fnOS 校验会话 + 转发到 Unix socket，Python proxy 再转发到 dsh web
+- **离线打包**：dsh（含 node_modules）随 fpk 内置在 `app/server`，安装免联网
 
 ## 🚀 安装
 
-1. App Center 手动安装 `dsh-<version>.fpk`
-2. 安装向导填 DeepSeek API Key（sk- 开头，可留空后配置）
-3. 首次安装会 `npm install -g @deepseek-ai/dsh`（需联网 1-2 分钟）
+1. 从 [GitHub Release](https://github.com/techysy/deepseek-harness-fnos/releases) 下载 `dsh-<version>.fpk`
+2. App Center 手动安装 `dsh-<version>.fpk`
+3. 安装向导填 DeepSeek API Key（sk- 开头，可留空后配置）
 4. 桌面打开 DSH 应用图标进入浏览器 UI
+
+> 依赖：fnOS 应用中心需已安装 **Node.js 24**（nodejs_v24，App Center 会自动安装依赖）。
 
 ## 🔧 配置
 
@@ -37,15 +40,28 @@ fnOS
 | dsh web | 127.0.0.1:18080 | DeepSeek Harness 浏览器 UI（只回环）|
 | 统一网关 | /app/dsh | fnOS 桌面图标入口 |
 
-## 🛠️ 开发
+## 🛠️ 从源码打包
 
-- `manifest`：dsh 1.0.0（独立版本号，不随上游同步）
-- `cmd/main`：dsh 生命周期（start/stop/status/restart）
-- `cmd/proxy.py`：统一网关代理（Unix socket → 127.0.0.1:18080，重写 Host 规避 dsh browser-trust）
-- `cmd/install_callback`：npm 安装 dsh + 配置 DSH_HOME
-- 依赖：nodejs_v24（`npm install -g @deepseek-ai/dsh`）
+`app/server/node_modules`（346M，含 node-pty 等原生模块）不在 git 仓库，需在 NAS 上重建后打包：
+
+```bash
+# 1. 重建 app/server node_modules（native 模块需在 NAS glibc 环境编译）
+cd app/server
+/vol4/@appcenter/nodejs_v24/bin/npm install   # 依赖 g++/make，见下方"前置要求"
+
+# 2. 打包 fpk
+cd .. && fnpack build
+```
+
+### 前置要求
+- **nodejs_v24**（依赖 `install_dep_apps`）
+- **build-essential**（g++/make，编译 node-pty 等原生模块）：
+  ```bash
+  sudo apt update && sudo apt install -y build-essential
+  ```
+  > install_callback 会在缺失 g++ 时于 install.log 给出提示。
 
 ## 📋 已知限制
 
 - dsh web 只能绑 127.0.0.1（官方安全限制），因此只能经官方统一网关访问，不能直接用 IP:端口
-- 首次安装需联网（npm 下载 532 个包）
+- `app/server/node_modules` 需在 **NAS 的 glibc 环境**编译（在 Arch/高版本 glibc 编译的原生模块不兼容 NAS，报 `GLIBC_2.42 not found`）
