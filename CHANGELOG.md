@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 0.1.0-rc.6 (2026-08-14)
+- **版本号对齐官方**：manifest 版本从自创 `1.x.x` 改为官方 `0.1.0-rc.6`（与 `@deepseek-ai/dsh` npm 包一致）
+- 历史 v1.0.x Release/tag 已删除
+- 累计修复：API 403（trusted-host）、crypto.randomUUID polyfill、settings 特权放宽、/home/dsh ENOENT、安装向导可填 API Key+代理、fnOS 设置页代理入口、卸载保留工作空间
+
 ## 1.0.14 (2026-08-14)
 - **数据保护：卸载不再删除工作空间**：移除 uninstall_callback 对 `dsh_home` 的 `rm -rf`
 - dsh_home 含工作空间（profiles/storages）、API Key（.env）、代理（proxy.conf）等用户数据，卸载/升级后全部保留
