@@ -1,9 +1,13 @@
-# DeepSeek Harness for fnOS
+# 🐳 DeepSeek Harness for fnOS
+
+[![上游版本](https://img.shields.io/badge/upstream-v0.1.0--rc.6-1E88E5?logo=deepseek&logoColor=white&label=DeepSeek%20Harness)](https://github.com/deepseek-ai/deepseek-harness)
+[![fnOS 版本](https://img.shields.io/github/v/release/techysy/deepseek-harness-fnos?label=fnOS&color=0A5D9C)](https://github.com/techysy/deepseek-harness-fnos/releases)
+[![离线打包](https://img.shields.io/badge/offline-免联网-2E7D32)](https://github.com/techysy/deepseek-harness-fnos)
 
 DeepSeek Harness（dsh）— DeepSeek 官方 agent 框架的浏览器 UI，打包成飞牛 fnOS 应用。
 
 - **上游项目**：[deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness)（DeepSeek 官方，v0.1.0-rc.6）
-- **飞牛打包版**：[techysy/deepseek-harness-fnos](https://github.com/techysy/deepseek-harness-fnos)
+- **飞牛打包版**：[techysy/deepseek-harness-fnos](https://github.com/techysy/deepseek-harness-fnos)（v0.1.0-rc.6）
 
 ## 🏗️ 架构
 
