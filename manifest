@@ -1,8 +1,8 @@
 appname               = dsh
-version               = 1.0.2
+version               = 1.0.3
 display_name          = DeepSeek Harness
 desc                  = DeepSeek Harness — DeepSeek 官方 agent 浏览器 UI，本地常驻服务（官方统一网关接入）
-changelog             = 应用名改为 DeepSeek Harness + 官方图标 + 修复 node PATH 和 socket 目录
+changelog             = 离线打包：dsh 随 fpk 内置（app/server），安装免联网
 arch                  = x86_64
 source                = thirdparty
 maintainer            = techysy

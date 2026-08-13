@@ -33,14 +33,18 @@ NODE_BIN=""
 for cand in /vol4/@appcenter/nodejs_v24/bin/node /var/apps/nodejs_v24/target/bin/node /usr/bin/node; do
     [ -x "$cand" ] && NODE_BIN="$cand" && break
 done
+# 离线 dsh 包 (随 fpk 打包在 app/server, 安装后解压在 ${TRIM_APPDEST}/server)
 DSH_JS=""
-for cand in /vol4/@appcenter/nodejs_v24/lib/node_modules/@deepseek-ai/dsh/lib/bin.js /usr/local/lib/node_modules/@deepseek-ai/dsh/lib/bin.js; do
+for cand in "${APP_DIR}/server/node_modules/@deepseek-ai/dsh/lib/bin.js" \
+            "${APP_DIR}/node_modules/@deepseek-ai/dsh/lib/bin.js" \
+            /vol4/@appcenter/nodejs_v24/lib/node_modules/@deepseek-ai/dsh/lib/bin.js \
+            /usr/local/lib/node_modules/@deepseek-ai/dsh/lib/bin.js; do
     [ -f "$cand" ] && DSH_JS="$cand" && break
 done
 
 log() { echo "[$(date '+%F %T')] $*" >> "${LOG}"; }
 
-# 寻找 dsh 可执行; 无 bin 链接时用 node 直接运行 dsh 的 bin.js
+# 寻找 dsh 可执行; 无 bin 链接时用 node 直接运行 dsh 的 bin.js (优先离线包)
 find_dsh_bin() {
     local cand
     for cand in "${DSH_BIN}" /vol4/@appcenter/nodejs_v24/bin/dsh /usr/local/bin/dsh /usr/bin/dsh; do
@@ -49,7 +53,7 @@ find_dsh_bin() {
             return 0
         fi
     done
-    # 兜底: 用 node 运行 dsh 的 bin.js
+    # 兜底: 用 node 运行离线/全局 dsh 的 bin.js
     if [ -x "${NODE_BIN}" ] && [ -n "${DSH_JS}" ] && [ -f "${DSH_JS}" ]; then
         DSH_BIN="${NODE_BIN}"
         DSH_ARGS="${DSH_JS}"

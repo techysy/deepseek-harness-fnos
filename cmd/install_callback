@@ -1,7 +1,6 @@
 #!/bin/bash
-# install_callback — 安装 DeepSeek Harness (dsh) + 配置
-# 在线模式: npm install -g @deepseek-ai/dsh (fpk 小, 需联网 1-2 分钟)
-# 失败时记录日志但不阻断安装, cmd/main 会检测 dsh 并提示。
+# install_callback — 配置 DeepSeek Harness (dsh) fnOS 应用
+# dsh 已随 fpk 离线打包在 app/server (node_modules), 无需联网 npm install
 set -uo pipefail
 
 APP_NAME="${TRIM_APPNAME:-dsh}"
@@ -9,15 +8,15 @@ APP_DIR="${TRIM_APPDEST:-/var/apps/${APP_NAME}}"
 DATA_DIR="${TRIM_PKGVAR:-/vol4/@appdata/${APP_NAME}}"
 LOG="${DATA_DIR}/install.log"
 DSH_HOME="${DATA_DIR}/dsh_home"
+# 离线 dsh 包 (随 fpk 打包, 安装后解压在 ${TRIM_APPDEST}/server)
+DSH_OFFLINE="${APP_DIR}/server/node_modules/@deepseek-ai/dsh/lib/bin.js"
 
 mkdir -p "${DATA_DIR}" "${DSH_HOME}"
 echo "[$(date '+%F %T')] install_callback start (user=$(id -un) uid=$(id -u))" >> "${LOG}"
 
-# ── 初始化 DSH_HOME (安装时提前创建, 避免启动时才建导致的权限/时序问题) ──
+# ── 初始化 DSH_HOME ──
 init_dsh_home() {
-    # dsh 需要 DSH_HOME 目录; 若没有 profiles, 首启动时由 dsh 自动初始化
     mkdir -p "${DSH_HOME}/profiles" "${DSH_HOME}/logs" 2>/dev/null
-    # 基础环境 (若不存在)
     if [ ! -f "${DSH_HOME}/.env" ]; then
         {
             echo "DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}"
@@ -26,63 +25,20 @@ init_dsh_home() {
     echo "[$(date '+%F %T')] dsh_home initialized at ${DSH_HOME}" >> "${LOG}"
 }
 
-# 保存安装向导传入的配置 (wizard_ 前缀) 到 .env
+# 保存安装向导配置到 .env (区分首次/升级, 避免升级清空)
 if [ ! -f "${DSH_HOME}/.env" ] || [ -n "${wizard_deepseek_api_key:-}" ]; then
     cat > "${DSH_HOME}/.env" <<EOF
 DEEPSEEK_API_KEY="${wizard_deepseek_api_key:-}"
 EOF
-    chmod 600 "${DSH_HOME}/.env"
+    chmod 600 "${DSH_HOME}/.env" 2>/dev/null
     echo "[$(date '+%F %T')] saved wizard config to .env" >> "${LOG}"
 fi
 
-# 已安装则跳过
-if [ -x "/usr/local/bin/dsh" ] || command -v dsh >/dev/null 2>&1; then
-    echo "[$(date '+%F %T')] dsh already installed, skip npm" >> "${LOG}"
-    init_dsh_home
-    exit 0
-fi
-
-# 在线安装 dsh
-echo "[$(date '+%F %T')] installing @deepseek-ai/dsh (may take 1-2 min)..."
-# 优先用 nodejs runtime 的 npm; npm 脚本用 /usr/bin/env node, 必须把 nodejs_v24 bin 加入 PATH
-NPM=/usr/bin/npm
-if [ -x /vol4/@appcenter/nodejs_v24/bin/npm ]; then
-    NPM=/vol4/@appcenter/nodejs_v24/bin/npm
-    export PATH="/vol4/@appcenter/nodejs_v24/bin:${PATH}"
-fi
-# 兜底: 若 npm 仍找不到 node, 用符号链接
-if ! command -v node >/dev/null 2>&1 && [ -x /vol4/@appcenter/nodejs_v24/bin/node ]; then
-    ln -sf /vol4/@appcenter/nodejs_v24/bin/node /usr/local/bin/node 2>/dev/null || true
-fi
-if "${NPM}" install -g @deepseek-ai/dsh >> "${LOG}" 2>&1; then
-    echo "[$(date '+%F %T')] dsh installed" >> "${LOG}"
+# 检查离线 dsh 包是否存在 (随 fpk 打包)
+if [ ! -f "${DSH_OFFLINE}" ]; then
+    echo "[$(date '+%F %T')] WARN: offline dsh package not found at ${DSH_OFFLINE} (check app/server)" >> "${LOG}"
 else
-    echo "[$(date '+%F %T')] direct install failed, trying proxy..." >> "${LOG}"
-    if "${NPM}" install -g --proxy http://127.0.0.1:7890 @deepseek-ai/dsh >> "${LOG}" 2>&1; then
-        echo "[$(date '+%F %T')] dsh installed via proxy" >> "${LOG}"
-    else
-        echo "[$(date '+%F %T')] ERROR: dsh install failed (check network). cmd/main will report." >> "${LOG}"
-    fi
-fi
-
-# npm 全局安装可能没在 nodejs_v24/bin 创建 dsh 链接 (dsh 用户无写权限)
-# 手动创建 bin 链接; 失败则依赖 cmd/main 用 node 直接运行
-DSH_BIN="$(command -v dsh 2>/dev/null || true)"
-if [ -z "${DSH_BIN}" ] && [ -f "/vol4/@appcenter/nodejs_v24/lib/node_modules/@deepseek-ai/dsh/lib/bin.js" ]; then
-    # 尝试创建 bin 链接 (可能因权限失败, 失败也没关系, cmd/main 会用 node 运行)
-    mkdir -p /usr/local/bin 2>/dev/null
-    cat > /usr/local/bin/dsh <<'EOF'
-#!/bin/bash
-# dsh launcher - 定位 nodejs_v24 的 dsh 包用 node 运行
-for NODE in /vol4/@appcenter/nodejs_v24/bin/node /var/apps/nodejs_v24/target/bin/node /usr/bin/node; do
-    [ -x "$NODE" ] && break
-done
-DSH_JS="/vol4/@appcenter/nodejs_v24/lib/node_modules/@deepseek-ai/dsh/lib/bin.js"
-[ -f "$DSH_JS" ] || DSH_JS="$(dirname "$(readlink -f "$0")")/../lib/node_modules/@deepseek-ai/dsh/lib/bin.js"
-exec "$NODE" "$DSH_JS" "$@"
-EOF
-    chmod +x /usr/local/bin/dsh 2>/dev/null
-    echo "[$(date '+%F %T')] created dsh launcher at /usr/local/bin/dsh" >> "${LOG}"
+    echo "[$(date '+%F %T')] offline dsh package OK: ${DSH_OFFLINE}" >> "${LOG}"
 fi
 
 echo "[$(date '+%F %T')] install_callback done" >> "${LOG}"

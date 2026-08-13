@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 1.0.3 (2026-08-13)
+- **离线打包**：dsh 随 fpk 内置（app/server/node_modules），NAS 安装免联网
+- install_callback 改为离线模式（不再 npm install）
+
 ## 1.0.2 (2026-08-13)
 - 应用名改为 **DeepSeek Harness**
 - 图标换成 **DeepSeek 官方图标**
