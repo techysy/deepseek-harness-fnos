@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 1.0.14 (2026-08-14)
+- **数据保护：卸载不再删除工作空间**：移除 uninstall_callback 对 `dsh_home` 的 `rm -rf`
+- dsh_home 含工作空间（profiles/storages）、API Key（.env）、代理（proxy.conf）等用户数据，卸载/升级后全部保留
+- 卸载只清理运行时日志/pid
+
 ## 1.0.13 (2026-08-14)
 - **fnOS 应用设置页加网络代理入口**：应用中心 → dsh 应用设置可修改代理（写 `DSH_HOME/proxy.conf`）
 - **更新逻辑**：设置页填写代理才更新 proxy.conf；**留空保留当前值**（不置空）
