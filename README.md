@@ -62,7 +62,6 @@ cd app/server
 # 2. 打包 fpk
 cd .. && fnpack build
 ```
-<img width="1763" height="1080" alt="ScreenShot_2026-08-14_030235_867" src="https://github.com/user-attachments/assets/30b6ab69-aa29-4c9f-875a-3e92b1a9a9d9" />
 
 ### 前置要求
 - **nodejs_v24**（依赖 `install_dep_apps`）
@@ -77,6 +76,8 @@ cd .. && fnpack build
 - **dsh 绑 0.0.0.0** 意味着局域网内都能访问 `http://<NAS_IP>:28000`，且 dsh 能执行代码——**注意网络安全**，必要时用 `trusted-host` 配置或防火墙限制网段
 - `app/server/node_modules` 需在 **NAS 的 glibc 环境**编译（在 Arch/高版本 glibc 编译的原生模块不兼容 NAS，报 `GLIBC_2.42 not found`）
 - 应用走 **fnOS 生命周期**管理（appcenter-cli / 应用中心以 `dsh` 用户调度），不要手动 `sudo node` 启动
+
+<img width="1763" height="1080" alt="ScreenShot_2026-08-14_030235_867" src="https://github.com/user-attachments/assets/30b6ab69-aa29-4c9f-875a-3e92b1a9a9d9" />
 
 ## 📝 版本历史
 
