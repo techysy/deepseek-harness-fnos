@@ -1,11 +1,15 @@
 #!/bin/bash
-# upgrade_callback — 升级 dsh
+# upgrade_callback — 升级 dsh (离线架构)
+# dsh 已随 fpk 离线打包在 app/server (node_modules), 升级即由 fnOS 重新安装新 fpk 完成
+# (新 fpk 的 app/server 会解压覆盖旧版, 无需联网 npm install).
+# 此处只做必要日志/占位, 不执行任何在线安装 (与"离线打包、安装免联网"架构一致).
 set -uo pipefail
+
 APP_NAME="${TRIM_APPNAME:-dsh}"
 DATA_DIR="${TRIM_PKGVAR:-/vol4/@appdata/${APP_NAME}}"
 LOG="${DATA_DIR}/install.log"
 
-NPM=/usr/bin/npm
-[ -x /vol4/@appcenter/nodejs_v24/bin/npm ] && NPM=/vol4/@appcenter/nodejs_v24/bin/npm
-"${NPM}" install -g --upgrade @deepseek-ai/dsh >> "${LOG}" 2>&1 || true
+echo "[$(date '+%F %T')] upgrade_callback: offline mode (新 fpk 已内置离线 dsh 包, 无需 npm install)" >> "${LOG}"
+
+# 不执行 npm install -g --upgrade (在线/全局安装, 与离线架构矛盾, 已移除)
 exit 0
