@@ -1,5 +1,8 @@
 # CHANGELOG
 
+## 1.0.11 (2026-08-14)
+- **开发者信息修正**：manifest maintainer 改为 **DeepSeek**（上游 deepseek-ai/deepseek-harness），distributor 保持 techysy/deepseek-harness-fnos
+
 ## 1.0.10 (2026-08-14)
 - **修复设置页 API 403**：放宽 dsh 特权 API（settings.describe 等）回环钉扎，允许局域网可信来源访问模型/插件/Agent 预设配置
 - 注意：飞牛移动 App 容器（WebView）有固有限制（SameSite cookie/localStorage/跨源），dsh 复杂前端建议用手机浏览器（Chrome/飞书）访问
