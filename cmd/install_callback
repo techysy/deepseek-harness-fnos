@@ -1,7 +1,7 @@
 #!/bin/bash
 # install_callback — 配置 DeepSeek Harness (dsh) fnOS 应用
 # 含 FN Connect 域名 (trusted_hosts.conf) 保存 + settings 前端 patch (memory->host)
-# dsh 已随 fpk 离线打包在 app/server (node_modules), 无需联网 npm install
+# 离线优先: 若 fpk 内置 node_modules 则免联网; 否则在线 npm install (针对当前架构编译)
 set -uo pipefail
 
 APP_NAME="${TRIM_APPNAME:-dsh}"
@@ -53,9 +53,22 @@ else
     echo "[$(date '+%F %T')] wizard_fnos_domain empty; keep current trusted_hosts.conf" >> "${LOG}"
 fi
 
-# 检查离线 dsh 包是否存在 (随 fpk 打包)
+# 检查离线 dsh 包是否存在 (随 fpk 打包); 若无则在线安装 (针对当前架构编译原生模块)
 if [ ! -f "${DSH_OFFLINE}" ]; then
-    echo "[$(date '+%F %T')] WARN: offline dsh package not found at ${DSH_OFFLINE} (check app/server)" >> "${LOG}"
+    echo "[$(date '+%F %T')] WARN: offline dsh package not found; online npm install (针对当前架构编译)..." >> "${LOG}"
+    NPM_BIN=""
+    for cand in /vol4/@appcenter/nodejs_v24/bin/npm /var/apps/nodejs_v24/target/bin/npm /usr/bin/npm; do
+        [ -x "$cand" ] && NPM_BIN="$cand" && break
+    done
+    if [ -n "${NPM_BIN}" ]; then
+        ( cd "${APP_DIR}/server" && "${NPM_BIN}" install @deepseek-ai/dsh@^0.1.0-rc.6 >> "${LOG}" 2>&1 )
+        echo "[$(date '+%F %T')] online npm install exit=$?" >> "${LOG}"
+        if [ ! -f "${DSH_OFFLINE}" ]; then
+            echo "[$(date '+%F %T')] ERROR: online install did not produce ${DSH_OFFLINE}" >> "${LOG}"
+        fi
+    else
+        echo "[$(date '+%F %T')] ERROR: no npm found; cannot install dsh online" >> "${LOG}"
+    fi
 else
     echo "[$(date '+%F %T')] offline dsh package OK: ${DSH_OFFLINE}" >> "${LOG}"
 fi
