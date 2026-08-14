@@ -125,6 +125,15 @@ PATCHEOF
     [ -z "${TRUSTED_HOST_ARGS}" ] && TRUSTED_HOST_ARGS="--trusted-host 127.0.0.1"
     # 启动 dsh web: 不带 --host (让 patch 的 0.0.0.0 生效), 显式传 --port + trusted-host
     # DSH_ARGS 非空时 = 用 node <bin.js> 运行 (无 bin 链接的兜底)
+    # dsh 自托管 node: 把 nodejs_v24 bin 目录加入 PATH, 供 dsh 进程及 agent 调用 node/npm
+    if [ -n "${NODE_BIN}" ]; then
+        NODE_BIN_DIR="$(dirname "${NODE_BIN}" 2>/dev/null)"
+        case ":${PATH}:" in
+            *":${NODE_BIN_DIR}:"*) : ;;
+            *) export PATH="${NODE_BIN_DIR}:${PATH}" ;;
+        esac
+        log "dsh self-hosting node via: ${NODE_BIN}"
+    fi
     DSH_HOME="${DSH_HOME}" nohup "${DSH_BIN}" ${DSH_ARGS:-} web --port "${DSH_PORT}" ${TRUSTED_HOST_ARGS} \
         >> "${DSH_LOG}" 2>&1 &
     echo $! > "${DSH_PID}"
