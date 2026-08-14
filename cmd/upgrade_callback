@@ -17,9 +17,9 @@ echo "[$(date '+%F %T')] upgrade_callback start" >> "${LOG}"
 # 检查离线 dsh 包; 若无则在线安装 (针对当前架构编译原生模块)
 if [ ! -f "${DSH_OFFLINE}" ]; then
     echo "[$(date '+%F %T')] offline dsh package not found; online npm install..." >> "${LOG}"
-    # 定位 nodejs_v24 (优先应用卷 + /var/apps 软链) 并加入 PATH, 供 npm 的 #!/usr/bin/env node 使用
+    # 定位 nodejs_v24 (优先 fnOS 标准软链 /var/apps/<dep>/target, fallback 应用卷) 并加入 PATH
     NODE_DIR=""
-    for cand in "${APP_VOL}/@appcenter/nodejs_v24/bin" /var/apps/nodejs_v24/target/bin; do
+    for cand in /var/apps/nodejs_v24/target/bin "${APP_VOL}/@appcenter/nodejs_v24/bin"; do
         [ -x "$cand/node" ] && NODE_DIR="$cand" && break
     done
     if [ -n "${NODE_DIR}" ]; then

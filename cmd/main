@@ -31,15 +31,18 @@ PROXY_SRC="${CMD_DIR}/proxy.py"
 # dsh 可执行 + npm 路径
 DSH_BIN="$(command -v dsh 2>/dev/null || true)"
 NPM=/usr/bin/npm
+# fnOS 依赖应用标准接入: /var/apps/<dep>/target 软链保证存在 (无论卷); fallback 到应用卷
+[ -x /var/apps/nodejs_v24/target/bin/npm ] && NPM=/var/apps/nodejs_v24/target/bin/npm
 [ -x "${APP_VOL}/@appcenter/nodejs_v24/bin/npm" ] && NPM="${APP_VOL}/@appcenter/nodejs_v24/bin/npm"
 NODE_BIN=""
-for cand in "${APP_VOL}/@appcenter/nodejs_v24/bin/node" /var/apps/nodejs_v24/target/bin/node /usr/bin/node; do
+for cand in /var/apps/nodejs_v24/target/bin/node "${APP_VOL}/@appcenter/nodejs_v24/bin/node" /usr/bin/node; do
     [ -x "$cand" ] && NODE_BIN="$cand" && break
 done
 # 离线 dsh 包 (随 fpk 打包在 app/server, 安装后解压在 ${TRIM_APPDEST}/server)
 DSH_JS=""
 for cand in "${APP_DIR}/server/node_modules/@deepseek-ai/dsh/lib/bin.js" \
             "${APP_DIR}/node_modules/@deepseek-ai/dsh/lib/bin.js" \
+            /var/apps/nodejs_v24/target/lib/node_modules/@deepseek-ai/dsh/lib/bin.js \
             "${APP_VOL}/@appcenter/nodejs_v24/lib/node_modules/@deepseek-ai/dsh/lib/bin.js" \
             /usr/local/lib/node_modules/@deepseek-ai/dsh/lib/bin.js; do
     [ -f "$cand" ] && DSH_JS="$cand" && break
@@ -50,7 +53,7 @@ log() { echo "[$(date '+%F %T')] $*" >> "${LOG}"; }
 # 寻找 dsh 可执行; 无 bin 链接时用 node 直接运行 dsh 的 bin.js (优先离线包)
 find_dsh_bin() {
     local cand
-    for cand in "${DSH_BIN}" "${APP_VOL}/@appcenter/nodejs_v24/bin/dsh" /usr/local/bin/dsh /usr/bin/dsh; do
+    for cand in "${DSH_BIN}" /var/apps/nodejs_v24/target/bin/dsh "${APP_VOL}/@appcenter/nodejs_v24/bin/dsh" /usr/local/bin/dsh /usr/bin/dsh; do
         if [ -x "${cand}" ]; then
             DSH_BIN="${cand}"
             return 0
