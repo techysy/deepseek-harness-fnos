@@ -2,7 +2,7 @@
 
 ## 0.1.0-rc.6 (2026-08-14)
 
-> 版本号对齐官方 `@deepseek-ai/dsh`（deepseek-ai/deepseek-harness 0.1.0-rc.6）。历史 v1.0.x 迭代详情见 `test log.md`。
+> 版本号对齐官方 `@deepseek-ai/dsh`（deepseek-ai/deepseek-harness 0.1.0-rc.6）。历史迭代详情（0.0.1~0.0.15，原始 1.0.0~1.0.14）见 `test log.md`。
 
 ### 核心功能
 - **dsh web 常驻服务**：`dsh web` 局域网直连 `0.0.0.0:28000`（经 cordis.patch.yml 覆盖，绕过 CLI 0.0.0.0 校验）
@@ -24,6 +24,10 @@
 - **fnOS 应用设置页可改代理**（IP + 端口两个输入框；留空保留当前值，不置空；改后重启生效）
 - **默认不走代理**：proxy.conf 不存在时不设置；需代理时由用户配置（写入 `DSH_HOME/proxy.conf`，`PROXY=http://IP:端口`）
 - dsh 网络请求（git/npm/API）经 HTTP_PROXY/HTTPS_PROXY 走代理
+
+### FN Connect 远程访问
+- **FN Connect 域名（FN ID）配置**：安装向导 / 设置页可填，写入 `DSH_HOME/trusted_hosts.conf`（单域名），dsh 启动时加入 `--trusted-host`，域名远程访问 API 不再 403
+- **修复 settings 前端空白**：非 loopback（FN Connect 域名）访问时，settings 前端改用 host 模式读服务器配置（patch_settings_memory.py），修复插件配置 / 模型配置空白页（上游 loopback-only 设计限制）
 
 ### 数据与元数据
 - **数据保护**：卸载不再删除工作空间（保留 dsh_home 的 profiles/storages、API Key、代理），只清运行时日志/pid
