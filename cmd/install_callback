@@ -65,9 +65,13 @@ if [ ! -f "${DSH_OFFLINE}" ]; then
     done
     if [ -n "${NODE_DIR}" ]; then
         export PATH="${NODE_DIR}:${PATH}"
-        # R2S 等低内存设备限制编译并发, 防 OOM
+        # 低内存设备 (R2S 等 1GB) 防 OOM: 单线程编译 + 限制 node 堆内存
         export npm_config_jobs=1
-        echo "[$(date '+%F %T')] using node dir: ${NODE_DIR} (PATH updated)" >> "${LOG}"
+        export NODE_OPTIONS="--max-old-space-size=512"
+        # npm 缓存目录: 部分用户 HOME 不存在 (如 /home/admin), 改到数据区
+        mkdir -p "${DATA_DIR}/.npm" 2>/dev/null
+        export HOME="${DATA_DIR}"
+        echo "[$(date '+%F %T')] using node dir: ${NODE_DIR} (jobs=1, heap=512M)" >> "${LOG}"
         ( cd "${APP_DIR}/server" && npm install @deepseek-ai/dsh@^0.1.0-rc.6 >> "${LOG}" 2>&1 )
         echo "[$(date '+%F %T')] online npm install exit=$?" >> "${LOG}"
         if [ ! -f "${DSH_OFFLINE}" ]; then
