@@ -113,6 +113,8 @@ PATCHEOF
     for ip in ${LAN_IPS}; do
         TRUSTED_HOST_ARGS="${TRUSTED_HOST_ARGS} --trusted-host ${ip}"
     done
+    # 内置默认 trusted-host 域名: 飞牛移动 App (office.app.5ddd.com) 访问 dsh 时的 Host.
+    TRUSTED_HOST_ARGS="${TRUSTED_HOST_ARGS} --trusted-host office.app.5ddd.com"
     # 读取用户配置的 FN Connect 域名 (FN ID), 单行一个域名, 追加到 --trusted-host.
     # 配置在 ${DSH_HOME}/trusted_hosts.conf, 与 proxy.conf 机制一致; 取首个非空行.
     if [ -f "${DSH_HOME}/trusted_hosts.conf" ]; then
