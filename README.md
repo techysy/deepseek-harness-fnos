@@ -53,6 +53,7 @@ fnOS（飞牛私有云）
 - **dsh 绑 0.0.0.0**：通过 `cordis.patch.yml` 覆盖 webserver 配置，绕过 CLI 的 `--host 0.0.0.0` 安全校验（dsh CLI 会拒绝 0.0.0.0）
 - **browser-trust 围栏**：dsh 只信任回环地址或 `--trusted-host` 声明的来源访问 `/api/*`，否则返回 **HTTP 403**。`cmd/main` 启动时动态探测本机局域网 IP 并加入 `--trusted-host`
 - **统一网关代理（proxy.py）**：可选第二入口，转发并重写 Host 头规避 browser-trust，同时重写 HTML 绝对资源路径 + 注入 `<base>`，保证经 `/app/dsh` 访问资源不丢前缀
+- **FN Connect**：`http://dsh.<FN_ID>.fnos.net` 直接访问 （fn鉴权）
 - **离线打包**：dsh（含 node_modules）随 fpk 内置在 `app/server`，安装免联网
 
 ## 🚀 安装
@@ -68,11 +69,13 @@ fnOS（飞牛私有云）
 ## 🔧 配置
 
 ### DeepSeek API Key
-- 安装向导填写，或编辑 `/vol4/@appdata/dsh/dsh_home/.env`：
+- 安装向导填写，或编辑 `/@appdata/dsh/dsh_home/.env`：
   ```
   DEEPSEEK_API_KEY=sk-xxx
   ```
 - 改后重启应用生效
+- 当然也支持 应用内直接配置 官方或者自定义提供方的 API key
+<img width="1977" height="1164" alt="382fa5ba1eb85be13ed70580d38654ea" src="https://github.com/user-attachments/assets/6e48d940-c2a7-4f07-9340-afa3c9efbd5b" />
 
 ### 端口
 | 服务 | 端口/路径 | 说明 |
