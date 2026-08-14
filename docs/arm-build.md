@@ -2,6 +2,8 @@
 
 > 说明如何为 ARM / 多架构的飞牛 fnOS 打包 DeepSeek Harness（dsh）。
 > 采用飞牛官方标准的 `platform` 字段，交付 x86 离线版 + all 在线版两个 fpk。
+>
+> ⚠️ dsh 应用自托管 nodejs（依赖 nodejs_v24）的细节，见 **[dsh-nodejs.md](dsh-nodejs.md)**。
 
 ---
 
@@ -54,7 +56,7 @@ dsh-<version>-all.fpk    # 在线版（多架构通用）
 
 | 条件 | 说明 |
 |------|------|
-| **nodejs_v24** | `manifest` 的 `install_dep_apps = nodejs_v24`，安装时自动装 |
+| **nodejs_v24** | `manifest` 的 `install_dep_apps = nodejs_v24`，安装时自动装（接入见 dsh-nodejs.md） |
 | **build-essential** | g++/make，编译 node-pty 等原生模块必需（在线版） |
 | **联网** | 安装时从 npm registry 拉取 `@deepseek-ai/dsh`（在线版） |
 
@@ -112,26 +114,13 @@ mv /tmp/node_modules_backup app/server/node_modules
 
 ---
 
-## 7. 在线安装逻辑（install_callback / upgrade_callback）
+## 7. 在线安装流程
 
-离线包缺失时自动在线安装（已在 `cmd/install_callback`、`cmd/upgrade_callback` 实现）。
-核心：**自托管 node**——定位 nodejs_v24 加入 PATH，并设置 HOME / 限制内存防 OOM：
+离线包缺失时，`install_callback` / `upgrade_callback` 自动在线安装
+（node 自托管、防 OOM 等细节见 **[dsh-nodejs.md](dsh-nodejs.md)**）：
 
 ```bash
 if [ ! -f "${DSH_OFFLINE}" ]; then
-    echo "offline dsh package not found; online npm install..."
-    # 1) 定位 nodejs_v24 (优先 fnOS 标准软链 /var/apps/<dep>/target, fallback 应用卷)
-    NODE_DIR=""
-    for cand in /var/apps/nodejs_v24/target/bin "${APP_VOL}/@appcenter/nodejs_v24/bin"; do
-        [ -x "$cand/node" ] && NODE_DIR="$cand" && break
-    done
-    export PATH="${NODE_DIR}:${PATH}"
-    # 2) 低内存设备 (R2S 等 1GB) 防 OOM: 单线程 + 限制 node 堆内存
-    export npm_config_jobs=1
-    export NODE_OPTIONS="--max-old-space-size=512"
-    # 3) HOME 改到数据区 (部分用户 /home/<user> 不存在导致 EACCES)
-    mkdir -p "${DATA_DIR}/.npm"
-    export HOME="${DATA_DIR}"
     ( cd "${APP_DIR}/server" && npm install @deepseek-ai/dsh@^0.1.0-rc.6 )
 fi
 ```
@@ -163,11 +152,6 @@ fi
 - **在线安装耗时**：原生模块（node-pty/sharp 等）编译可能 5~20 分钟，属正常。
 - **依赖 nodejs_v24 的 arm 支持**：需确认飞牛应用商店的 `nodejs_v24` 是否有 arm64 版本（在线安装依赖它）。
 - **install_callback 兼容**：x86 离线版（有 node_modules）走离线路径，不受在线兜底影响。
-- **dsh 自托管 node**：dsh 应用以 `dsh` 用户运行，系统 PATH 无 node；脚本统一通过
-  fnOS 标准软链 `/var/apps/nodejs_v24/target` 定位 node（无论应用装哪个卷），
-  启动时把 node bin 加入 PATH，使 dsh 进程及 agent 子进程可直接调用 `node`/`npm`。
-- **卷路径动态化**：脚本从 `TRIM_PKGVAR`（数据目录）提取 `APP_VOL`（`/volX`）定位依赖，
-  不写死 `/vol1`/`/vol4`，避免撞到其他存储空间。
 - **低内存设备**：在线安装设置 `NODE_OPTIONS=--max-old-space-size=512`、`npm_config_jobs=1` 防 OOM。
 - **安全**：settings 前端 patch 解除上游 loopback-only 限制，建议配合 FN Connect 鉴权 / 网络访问控制。
 
