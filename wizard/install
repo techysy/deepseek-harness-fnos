@@ -36,7 +36,7 @@
       },
       {
         "type": "tips",
-        "helpText": "dsh 是 DeepSeek 官方 agent 框架（DeepSeek Harness）。安装后通过 fnOS 桌面图标打开浏览器 UI（直连 http://127.0.0.1:28000），或局域网/Tailscale 直连 http://<NAS_IP>:28000。\n代理配置写入 /vol4/@appdata/dsh/dsh_home/proxy.conf（PROXY=http://IP:端口），留空默认不走代理。FN Connect 域名写入 trusted_hosts.conf，留空则仅局域网访问。"
+        "helpText": "安装后通过桌面图标或 http://<NAS_IP>:28000 访问。代理与 FN Connect 域名留空则分别走默认/仅局域网。"
       }
     ]
   }

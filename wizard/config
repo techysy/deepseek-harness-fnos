@@ -28,7 +28,7 @@
       },
       {
         "type": "tips",
-        "helpText": "代理写入 /vol4/@appdata/dsh/dsh_home/proxy.conf（PROXY=http://IP:端口）；FN Connect 域名写入 /vol4/@appdata/dsh/dsh_home/trusted_hosts.conf（每行一个域名）。两者留空都不会清空当前设置，修改后重启 dsh 应用生效。"
+        "helpText": "代理写入 proxy.conf、FN Connect 域名写入 trusted_hosts.conf。留空保留当前设置，修改后重启应用生效。"
       }
     ]
   }
