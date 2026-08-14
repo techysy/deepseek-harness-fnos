@@ -47,6 +47,7 @@ fnOS（飞牛私有云）
 | **桌面图标** | `http://127.0.0.1:28000` | fnOS 桌面图标经 iframe 直连，无需网关 |
 | **局域网 / Tailscale** | `http://<NAS_IP>:28000` | dsh 绑 0.0.0.0，可直接访问 |
 | **fnOS 统一网关**（可选） | `/app/dsh` | 经 `app.sock` → proxy.py → 127.0.0.1:28000 |
+| **FN Connect** | `http://dsh.teshysy.fnos.net` | teshysy是我的fnid， fn鉴权后直接访问 |
 
 ### 关键机制
 
