@@ -19,8 +19,16 @@
         "desc": "HTTP 代理的端口（如 mihomo 7890、9Router 20128）。"
       },
       {
+        "type": "text",
+        "field": "fnos_domain",
+        "label": "FN Connect 域名",
+        "placeholder": "dsh.xxx.fnos.net",
+        "initValue": "",
+        "desc": "飞牛 FN Connect 分配给本应用的远程访问域名（如 dsh.你的用户名.fnos.net）。填写后加入 dsh 信任列表，域名远程访问 API 不再 403。留空保留当前设置。"
+      },
+      {
         "type": "tips",
-        "helpText": "代理写入 /vol4/@appdata/dsh/dsh_home/proxy.conf（PROXY=http://IP:端口）。留空不会清空当前代理设置，修改后重启 dsh 应用生效。"
+        "helpText": "代理写入 /vol4/@appdata/dsh/dsh_home/proxy.conf（PROXY=http://IP:端口）；FN Connect 域名写入 /vol4/@appdata/dsh/dsh_home/trusted_hosts.conf（每行一个域名）。两者留空都不会清空当前设置，修改后重启 dsh 应用生效。"
       }
     ]
   }

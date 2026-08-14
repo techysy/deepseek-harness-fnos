@@ -26,8 +26,16 @@
         "tip": "HTTP 代理的端口（如 mihomo 7890、9Router 20128）。需与代理 IP 一起填。"
       },
       {
+        "type": "text",
+        "field": "wizard_fnos_domain",
+        "label": "FN Connect 域名（可选）",
+        "initValue": "",
+        "placeholder": "dsh.xxx.fnos.net",
+        "tip": "飞牛 FN Connect 分配给本应用的远程访问域名（如 dsh.你的用户名.fnos.net）。填写后 dsh 会将该域名加入 browser-trust 信任列表，域名远程访问时 API 不再 403。留空则仅局域网 IP 可访问 API。"
+      },
+      {
         "type": "tips",
-        "helpText": "dsh 是 DeepSeek 官方 agent 框架（DeepSeek Harness）。安装后通过 fnOS 桌面图标打开浏览器 UI（直连 http://127.0.0.1:28000），或局域网/Tailscale 直连 http://<NAS_IP>:28000。\n若访问 GitHub/外部 API 超时，可填代理 IP + 端口（如 127.0.0.1:7890），将写入 /vol4/@appdata/dsh/dsh_home/proxy.conf（PROXY=http://IP:端口）。留空默认不走代理。"
+        "helpText": "dsh 是 DeepSeek 官方 agent 框架（DeepSeek Harness）。安装后通过 fnOS 桌面图标打开浏览器 UI（直连 http://127.0.0.1:28000），或局域网/Tailscale 直连 http://<NAS_IP>:28000。\n若访问 GitHub/外部 API 超时，可填代理 IP + 端口（如 127.0.0.1:7890），将写入 /vol4/@appdata/dsh/dsh_home/proxy.conf（PROXY=http://IP:端口）。留空默认不走代理。\n如需通过 FN Connect 域名远程访问，请填上方 FN Connect 域名（写入 dsh_home/trusted_hosts.conf）。"
       }
     ]
   }

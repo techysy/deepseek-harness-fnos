@@ -1,5 +1,6 @@
 #!/bin/bash
 # install_callback — 配置 DeepSeek Harness (dsh) fnOS 应用
+# 含 FN Connect 域名 (trusted_hosts.conf) 保存 + settings 前端 patch (memory->host)
 # dsh 已随 fpk 离线打包在 app/server (node_modules), 无需联网 npm install
 set -uo pipefail
 
@@ -42,11 +43,36 @@ if [ -n "${wizard_proxy_ip:-}" ] && [ -n "${wizard_proxy_port:-}" ]; then
     echo "[$(date '+%F %T')] saved wizard proxy to proxy.conf: http://${wizard_proxy_ip}:${wizard_proxy_port}" >> "${LOG}"
 fi
 
+# 保存安装向导填的 FN Connect 域名到 trusted_hosts.conf (每行一个 authority; 留空保留当前值)
+if [ -n "${wizard_fnos_domain:-}" ]; then
+    {
+        echo "# dsh-fnos trusted hosts (FN Connect 域名等), 每行一个 authority (host 或 host:port)"
+        echo "${wizard_fnos_domain}"
+    } > "${DSH_HOME}/trusted_hosts.conf" 2>/dev/null
+    chmod 600 "${DSH_HOME}/trusted_hosts.conf" 2>/dev/null
+    chown "${APP_NAME:-dsh}:${APP_NAME:-dsh}" "${DSH_HOME}/trusted_hosts.conf" 2>/dev/null || true
+    echo "[$(date '+%F %T')] saved wizard FN Connect domain to trusted_hosts.conf: ${wizard_fnos_domain}" >> "${LOG}"
+else
+    echo "[$(date '+%F %T')] wizard_fnos_domain empty; keep current trusted_hosts.conf" >> "${LOG}"
+fi
+
 # 检查离线 dsh 包是否存在 (随 fpk 打包)
 if [ ! -f "${DSH_OFFLINE}" ]; then
     echo "[$(date '+%F %T')] WARN: offline dsh package not found at ${DSH_OFFLINE} (check app/server)" >> "${LOG}"
 else
     echo "[$(date '+%F %T')] offline dsh package OK: ${DSH_OFFLINE}" >> "${LOG}"
+fi
+
+# ── 应用 settings 前端 patch (memory->host) ──
+# 非 loopback (FN Connect 域名) 访问时, dsh 前端默认用 memory 模式读配置导致插件配置空白.
+# patch 脚本将 dsh-client-ui-settings(-models) 的 "isLoopback ? \"host\" : \"memory\"" 改为固定 "host".
+PATCH_SCRIPT="${APP_DIR}/scripts/patch_settings_memory.py"
+if [ -f "${PATCH_SCRIPT}" ]; then
+    echo "[$(date '+%F %T')] applying settings memory->host patch..." >> "${LOG}"
+    python3 "${PATCH_SCRIPT}" >> "${LOG}" 2>&1
+    echo "[$(date '+%F %T')] settings patch applied (exit=$?)" >> "${LOG}"
+else
+    echo "[$(date '+%F %T')] WARN: patch script not found at ${PATCH_SCRIPT}" >> "${LOG}"
 fi
 
 # ── 检测 g++/编译工具链 (node-pty 等 native 模块如需重建时依赖) ──
