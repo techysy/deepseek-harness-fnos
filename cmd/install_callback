@@ -66,7 +66,7 @@ fi
 # ── 应用 settings 前端 patch (memory->host) ──
 # 非 loopback (FN Connect 域名) 访问时, dsh 前端默认用 memory 模式读配置导致插件配置空白.
 # patch 脚本将 dsh-client-ui-settings(-models) 的 "isLoopback ? \"host\" : \"memory\"" 改为固定 "host".
-PATCH_SCRIPT="${APP_DIR}/scripts/patch_settings_memory.py"
+PATCH_SCRIPT="${APP_DIR}/cmd/patch_settings_memory.py"
 if [ -f "${PATCH_SCRIPT}" ]; then
     echo "[$(date '+%F %T')] applying settings memory->host patch..." >> "${LOG}"
     python3 "${PATCH_SCRIPT}" >> "${LOG}" 2>&1
