@@ -56,18 +56,23 @@ fi
 # 检查离线 dsh 包是否存在 (随 fpk 打包); 若无则在线安装 (针对当前架构编译原生模块)
 if [ ! -f "${DSH_OFFLINE}" ]; then
     echo "[$(date '+%F %T')] WARN: offline dsh package not found; online npm install (针对当前架构编译)..." >> "${LOG}"
-    NPM_BIN=""
-    for cand in /vol4/@appcenter/nodejs_v24/bin/npm /var/apps/nodejs_v24/target/bin/npm /usr/bin/npm; do
-        [ -x "$cand" ] && NPM_BIN="$cand" && break
+    # 定位 nodejs_v24 (多卷 /vol1 /vol4 通配) 并加入 PATH, 供 npm 的 #!/usr/bin/env node 使用
+    NODE_DIR=""
+    for cand in /vol*/@appcenter/nodejs_v24/bin /var/apps/nodejs_v24/target/bin; do
+        [ -x "$cand/node" ] && NODE_DIR="$cand" && break
     done
-    if [ -n "${NPM_BIN}" ]; then
-        ( cd "${APP_DIR}/server" && "${NPM_BIN}" install @deepseek-ai/dsh@^0.1.0-rc.6 >> "${LOG}" 2>&1 )
+    if [ -n "${NODE_DIR}" ]; then
+        export PATH="${NODE_DIR}:${PATH}"
+        # R2S 等低内存设备限制编译并发, 防 OOM
+        export npm_config_jobs=1
+        echo "[$(date '+%F %T')] using node dir: ${NODE_DIR} (PATH updated)" >> "${LOG}"
+        ( cd "${APP_DIR}/server" && npm install @deepseek-ai/dsh@^0.1.0-rc.6 >> "${LOG}" 2>&1 )
         echo "[$(date '+%F %T')] online npm install exit=$?" >> "${LOG}"
         if [ ! -f "${DSH_OFFLINE}" ]; then
             echo "[$(date '+%F %T')] ERROR: online install did not produce ${DSH_OFFLINE}" >> "${LOG}"
         fi
     else
-        echo "[$(date '+%F %T')] ERROR: no npm found; cannot install dsh online" >> "${LOG}"
+        echo "[$(date '+%F %T')] ERROR: nodejs_v24 not found; cannot install dsh online" >> "${LOG}"
     fi
 else
     echo "[$(date '+%F %T')] offline dsh package OK: ${DSH_OFFLINE}" >> "${LOG}"
@@ -76,7 +81,7 @@ fi
 # ── 应用 settings 前端 patch (memory->host) ──
 # 非 loopback (FN Connect 域名) 访问时, dsh 前端默认用 memory 模式读配置导致插件配置空白.
 # patch 脚本将 dsh-client-ui-settings(-models) 的 "isLoopback ? \"host\" : \"memory\"" 改为固定 "host".
-PATCH_SCRIPT="${APP_DIR}/cmd/patch_settings_memory.py"
+PATCH_SCRIPT="$(dirname "$0")/patch_settings_memory.py"
 if [ -f "${PATCH_SCRIPT}" ]; then
     echo "[$(date '+%F %T')] applying settings memory->host patch..." >> "${LOG}"
     python3 "${PATCH_SCRIPT}" >> "${LOG}" 2>&1

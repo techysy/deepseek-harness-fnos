@@ -15,22 +15,25 @@ echo "[$(date '+%F %T')] upgrade_callback start" >> "${LOG}"
 # 检查离线 dsh 包; 若无则在线安装 (针对当前架构编译原生模块)
 if [ ! -f "${DSH_OFFLINE}" ]; then
     echo "[$(date '+%F %T')] offline dsh package not found; online npm install..." >> "${LOG}"
-    NPM_BIN=""
-    for cand in /vol4/@appcenter/nodejs_v24/bin/npm /var/apps/nodejs_v24/target/bin/npm /usr/bin/npm; do
-        [ -x "$cand" ] && NPM_BIN="$cand" && break
+    # 定位 nodejs_v24 (多卷 /vol1 /vol4 通配) 并加入 PATH, 供 npm 的 #!/usr/bin/env node 使用
+    NODE_DIR=""
+    for cand in /vol*/@appcenter/nodejs_v24/bin /var/apps/nodejs_v24/target/bin; do
+        [ -x "$cand/node" ] && NODE_DIR="$cand" && break
     done
-    if [ -n "${NPM_BIN}" ]; then
-        ( cd "${APP_DIR}/server" && "${NPM_BIN}" install @deepseek-ai/dsh@^0.1.0-rc.6 >> "${LOG}" 2>&1 )
-        echo "[$(date '+%F %T')] online npm install exit=$?" >> "${LOG}"
+    if [ -n "${NODE_DIR}" ]; then
+        export PATH="${NODE_DIR}:${PATH}"
+        export npm_config_jobs=1   # 低内存设备防 OOM
+        ( cd "${APP_DIR}/server" && npm install @deepseek-ai/dsh@^0.1.0-rc.6 >> "${LOG}" 2>&1 )
+        echo "[$(date '+%F %T')] online npm install exit=$? (node dir: ${NODE_DIR})" >> "${LOG}"
     else
-        echo "[$(date '+%F %T')] ERROR: no npm found; cannot install dsh online" >> "${LOG}"
+        echo "[$(date '+%F %T')] ERROR: nodejs_v24 not found; cannot install dsh online" >> "${LOG}"
     fi
 else
     echo "[$(date '+%F %T')] offline dsh package OK: ${DSH_OFFLINE}" >> "${LOG}"
 fi
 
 # 应用 settings 前端 patch (memory->host), 与 install_callback 一致, 幂等
-PATCH_SCRIPT="${APP_DIR}/cmd/patch_settings_memory.py"
+PATCH_SCRIPT="$(dirname "$0")/patch_settings_memory.py"
 if [ -f "${PATCH_SCRIPT}" ]; then
     echo "[$(date '+%F %T')] applying settings memory->host patch..." >> "${LOG}"
     python3 "${PATCH_SCRIPT}" >> "${LOG}" 2>&1
