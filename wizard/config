@@ -1,6 +1,6 @@
 [
   {
-    "stepTitle": "网络代理配置",
+    "stepTitle": "网络代理与 FN Connect 配置",
     "items": [
       {
         "type": "text",
@@ -8,7 +8,7 @@
         "label": "代理 IP",
         "placeholder": "127.0.0.1",
         "initValue": "",
-        "desc": "HTTP 代理的 IP（如 mihomo/Clash 的 127.0.0.1，或 9Router）。留空保留当前设置。"
+        "desc": "HTTP 代理的 IP 地址（如 mihomo/Clash 的 127.0.0.1，或 9Router）。只填 IP 本身，不要带 http://，端口单独填下一项。留空保留当前设置。"
       },
       {
         "type": "text",
@@ -16,7 +16,7 @@
         "label": "代理端口",
         "placeholder": "7890",
         "initValue": "",
-        "desc": "HTTP 代理的端口（如 mihomo 7890、9Router 20128）。"
+        "desc": "HTTP 代理的端口号（纯数字，如 mihomo 7890、9Router 20128）。不要带冒号。"
       },
       {
         "type": "text",
@@ -24,7 +24,7 @@
         "label": "FN Connect 域名",
         "placeholder": "dsh.xxx.fnos.net",
         "initValue": "",
-        "desc": "飞牛 FN Connect 分配给本应用的远程访问域名（如 dsh.你的用户名.fnos.net）。填写后加入 dsh 信任列表，域名远程访问 API 不再 403。留空保留当前设置。"
+        "desc": "飞牛 FN Connect 分配给本应用的远程访问域名。只填域名本身（如 dsh.你的用户名.fnos.net），不要带 https:// 或路径。填写后加入 dsh 信任列表，域名远程访问 API 不再 403。留空保留当前设置。"
       },
       {
         "type": "tips",

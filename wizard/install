@@ -7,7 +7,8 @@
         "field": "wizard_deepseek_api_key",
         "label": "DeepSeek API Key",
         "initValue": "",
-        "tip": "DeepSeek 开放平台的 API Key（sk- 开头）。可选，留空可在应用内配置。dsh 需要 DeepSeek API 才能对话。"
+        "placeholder": "sk-xxxxxxxxxxxxxxxx",
+        "tip": "DeepSeek 开放平台 API Key（sk- 开头）。可不填，留空后可在应用内设置页配置；但 dsh 需要有效的 DeepSeek API Key 才能正常对话，建议此处直接填写。"
       },
       {
         "type": "text",
@@ -15,7 +16,7 @@
         "label": "代理 IP（可选）",
         "initValue": "",
         "placeholder": "127.0.0.1",
-        "tip": "HTTP 代理的 IP（如 mihomo/Clash 的 127.0.0.1）。如访问 GitHub 超时可填，留空默认不走代理。"
+        "tip": "HTTP 代理的 IP 地址（如 mihomo/Clash 的 127.0.0.1，或 9Router）。只填 IP 本身，不要带 http://，端口单独填在下一项。访问 GitHub/外部 API 超时时可填，留空默认不走代理。"
       },
       {
         "type": "text",
@@ -23,7 +24,7 @@
         "label": "代理端口（可选）",
         "initValue": "",
         "placeholder": "7890",
-        "tip": "HTTP 代理的端口（如 mihomo 7890、9Router 20128）。需与代理 IP 一起填。"
+        "tip": "HTTP 代理的端口号（纯数字，如 mihomo 7890、9Router 20128）。不要带冒号，需与代理 IP 一起填。"
       },
       {
         "type": "text",
@@ -31,11 +32,11 @@
         "label": "FN Connect 域名（可选）",
         "initValue": "",
         "placeholder": "dsh.xxx.fnos.net",
-        "tip": "飞牛 FN Connect 分配给本应用的远程访问域名（如 dsh.你的用户名.fnos.net）。填写后 dsh 会将该域名加入 browser-trust 信任列表，域名远程访问时 API 不再 403。留空则仅局域网 IP 可访问 API。"
+        "tip": "飞牛 FN Connect 分配给本应用的远程访问域名。只填域名本身（如 dsh.你的用户名.fnos.net），不要带 https:// 或路径。填写后 dsh 会将该域名加入信任列表，域名远程访问时 API 不再 403；留空则仅局域网 IP 可访问 API。"
       },
       {
         "type": "tips",
-        "helpText": "dsh 是 DeepSeek 官方 agent 框架（DeepSeek Harness）。安装后通过 fnOS 桌面图标打开浏览器 UI（直连 http://127.0.0.1:28000），或局域网/Tailscale 直连 http://<NAS_IP>:28000。\n若访问 GitHub/外部 API 超时，可填代理 IP + 端口（如 127.0.0.1:7890），将写入 /vol4/@appdata/dsh/dsh_home/proxy.conf（PROXY=http://IP:端口）。留空默认不走代理。\n如需通过 FN Connect 域名远程访问，请填上方 FN Connect 域名（写入 dsh_home/trusted_hosts.conf）。"
+        "helpText": "dsh 是 DeepSeek 官方 agent 框架（DeepSeek Harness）。安装后通过 fnOS 桌面图标打开浏览器 UI（直连 http://127.0.0.1:28000），或局域网/Tailscale 直连 http://<NAS_IP>:28000。\n代理配置写入 /vol4/@appdata/dsh/dsh_home/proxy.conf（PROXY=http://IP:端口），留空默认不走代理。FN Connect 域名写入 trusted_hosts.conf，留空则仅局域网访问。"
       }
     ]
   }
