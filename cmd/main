@@ -113,14 +113,11 @@ PATCHEOF
     for ip in ${LAN_IPS}; do
         TRUSTED_HOST_ARGS="${TRUSTED_HOST_ARGS} --trusted-host ${ip}"
     done
-    # 读取用户配置的额外 trusted-host 域名 (FN Connect 等), 每行一个 authority.
-    # 配置在 ${DSH_HOME}/trusted_hosts.conf, 与 proxy.conf 机制一致; 以 # 开头为注释.
+    # 读取用户配置的 FN Connect 域名 (FN ID), 单行一个域名, 追加到 --trusted-host.
+    # 配置在 ${DSH_HOME}/trusted_hosts.conf, 与 proxy.conf 机制一致; 取首个非空行.
     if [ -f "${DSH_HOME}/trusted_hosts.conf" ]; then
-        while IFS= read -r host; do
-            [ -z "${host}" ] && continue
-            case "${host}" in \#*) continue;; esac
-            TRUSTED_HOST_ARGS="${TRUSTED_HOST_ARGS} --trusted-host ${host}"
-        done < "${DSH_HOME}/trusted_hosts.conf"
+        HOST_TRUSTED="$(head -1 "${DSH_HOME}/trusted_hosts.conf" | tr -d '[:space:]')"
+        [ -n "${HOST_TRUSTED}" ] && TRUSTED_HOST_ARGS="${TRUSTED_HOST_ARGS} --trusted-host ${HOST_TRUSTED}"
     fi
     # 兜底: 若未探测到, 至少信任回环
     [ -z "${TRUSTED_HOST_ARGS}" ] && TRUSTED_HOST_ARGS="--trusted-host 127.0.0.1"

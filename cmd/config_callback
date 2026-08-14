@@ -2,7 +2,7 @@
 # config_callback — 保存 fnOS 应用设置页配置 (网络代理 + FN Connect 域名)
 # fnOS 设置页保存时运行. 字段为裸 env var (无 wizard_ 前缀, 与 install 向导不同).
 # 代理: 由 proxy_ip + proxy_port 拼成 PROXY=http://IP:port; 两者都填才更新; 留空保留当前值.
-# FN Connect 域名: fnos_domain 写入 trusted_hosts.conf (每行一个); 非空才更新; 留空保留当前值.
+# FN Connect 域名: fnos_domain 写入 trusted_hosts.conf (单个域名); 非空才更新; 留空保留当前值.
 set -uo pipefail
 
 APP_NAME="${TRIM_APPNAME:-dsh}"
@@ -23,12 +23,9 @@ else
     echo "[$(date '+%F %T')] proxy ip/port empty; keep current proxy.conf" >> "${LOG}"
 fi
 
-# 保存 FN Connect 域名到 trusted_hosts.conf (每行一个 authority; 留空保留当前值, 不置空)
+# 保存 FN Connect 域名到 trusted_hosts.conf (单个域名; 留空保留当前值, 不置空)
 if [ -n "${fnos_domain:-}" ]; then
-    {
-        echo "# dsh-fnos trusted hosts (FN Connect 域名等), 每行一个 authority (host 或 host:port)"
-        echo "${fnos_domain}"
-    } > "${DSH_HOME}/trusted_hosts.conf" 2>/dev/null
+    printf '%s\n' "${fnos_domain}" > "${DSH_HOME}/trusted_hosts.conf" 2>/dev/null
     chmod 600 "${DSH_HOME}/trusted_hosts.conf" 2>/dev/null
     chown "${APP_NAME:-dsh}:${APP_NAME:-dsh}" "${DSH_HOME}/trusted_hosts.conf" 2>/dev/null || true
     echo "[$(date '+%F %T')] updated trusted_hosts.conf: ${fnos_domain}" >> "${LOG}"

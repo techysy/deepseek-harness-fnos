@@ -43,12 +43,9 @@ if [ -n "${wizard_proxy_ip:-}" ] && [ -n "${wizard_proxy_port:-}" ]; then
     echo "[$(date '+%F %T')] saved wizard proxy to proxy.conf: http://${wizard_proxy_ip}:${wizard_proxy_port}" >> "${LOG}"
 fi
 
-# 保存安装向导填的 FN Connect 域名到 trusted_hosts.conf (每行一个 authority; 留空保留当前值)
+# 保存安装向导填的 FN Connect 域名到 trusted_hosts.conf (单个域名; 留空保留当前值)
 if [ -n "${wizard_fnos_domain:-}" ]; then
-    {
-        echo "# dsh-fnos trusted hosts (FN Connect 域名等), 每行一个 authority (host 或 host:port)"
-        echo "${wizard_fnos_domain}"
-    } > "${DSH_HOME}/trusted_hosts.conf" 2>/dev/null
+    printf '%s\n' "${wizard_fnos_domain}" > "${DSH_HOME}/trusted_hosts.conf" 2>/dev/null
     chmod 600 "${DSH_HOME}/trusted_hosts.conf" 2>/dev/null
     chown "${APP_NAME:-dsh}:${APP_NAME:-dsh}" "${DSH_HOME}/trusted_hosts.conf" 2>/dev/null || true
     echo "[$(date '+%F %T')] saved wizard FN Connect domain to trusted_hosts.conf: ${wizard_fnos_domain}" >> "${LOG}"
