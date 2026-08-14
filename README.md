@@ -59,10 +59,16 @@ fnOS（飞牛私有云）
 
 ## 🚀 安装
 
-1. 从 [GitHub Release](https://github.com/techysy/deepseek-harness-fnos/releases) 下载 `dsh-<version>.fpk`
-2. App Center 手动安装 `dsh-<version>.fpk`
-3. 安装向导填 DeepSeek API Key（sk- 开头，可留空后配置）
-4. 桌面打开 DSH 应用图标进入浏览器 UI
+从 [GitHub Release](https://github.com/techysy/deepseek-harness-fnos/releases) 下载 fpk（选对应架构）：
+
+| 版本 | 适用 | 说明 |
+|------|------|------|
+| `dsh-<version>-x86.fpk` | x86 NAS | 离线包（含 node_modules），安装免联网 |
+| `dsh-<version>-all.fpk` | x86 / ARM NAS | 在线包，安装时联网编译原生模块（耗时较长） |
+
+1. App Center **手动安装** 选下载的 fpk
+2. 安装向导填 DeepSeek API Key（sk- 开头，可留空后配置）
+3. 桌面打开 DSH 应用图标进入浏览器 UI
 
 > 依赖：fnOS 应用中心需已安装 **Node.js 24**（nodejs_v24，App Center 会自动安装依赖）。
 <img width="1802" height="1077" alt="ScreenShot_2026-08-14_024604_935" src="https://github.com/user-attachments/assets/42553a95-d341-4b7b-b8d9-a599fd4d6e29" />
@@ -91,11 +97,16 @@ fnOS（飞牛私有云）
 ```bash
 # 1. 重建 app/server node_modules（native 模块需在 NAS glibc 环境编译）
 cd app/server
-/vol4/@appcenter/nodejs_v24/bin/npm install   # 依赖 g++/make，见下方"前置要求"
+/var/apps/nodejs_v24/target/bin/npm install   # 依赖 g++/make，见下方"前置要求"
 
-# 2. 打包 fpk
+# 2. 打包 fpk（x86 离线版, platform=x86）
 cd .. && fnpack build
+mv dsh.fpk dsh-<version>-x86.fpk
 ```
+
+> **ARM / 多架构（all 在线版）**：不含 node_modules（装时在线编译）。打包前先
+> `mv app/server/node_modules /tmp/nm_backup`，改 manifest `platform = all` 再 `fnpack build`，
+> 得 `dsh-<version>-all.fpk`，完成后恢复 node_modules。详见 [`docs/arm-build.md`](docs/arm-build.md)。
 
 ### 前置要求
 - **nodejs_v24**（依赖 `install_dep_apps`）
