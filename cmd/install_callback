@@ -7,6 +7,8 @@ set -uo pipefail
 APP_NAME="${TRIM_APPNAME:-dsh}"
 APP_DIR="${TRIM_APPDEST:-/var/apps/${APP_NAME}}"
 DATA_DIR="${TRIM_PKGVAR:-/vol4/@appdata/${APP_NAME}}"
+# 动态获取应用所在卷 (从数据目录提取 /volX), 避免写死 /vol1 /vol4 撞到其他空间
+APP_VOL="$(printf '%s' "${DATA_DIR}" | sed -n 's#^\(/vol[^/]*\)/.*#\1#p')"
 LOG="${DATA_DIR}/install.log"
 DSH_HOME="${DATA_DIR}/dsh_home"
 # 离线 dsh 包 (随 fpk 打包, 安装后解压在 ${TRIM_APPDEST}/server)
@@ -56,9 +58,9 @@ fi
 # 检查离线 dsh 包是否存在 (随 fpk 打包); 若无则在线安装 (针对当前架构编译原生模块)
 if [ ! -f "${DSH_OFFLINE}" ]; then
     echo "[$(date '+%F %T')] WARN: offline dsh package not found; online npm install (针对当前架构编译)..." >> "${LOG}"
-    # 定位 nodejs_v24 (多卷 /vol1 /vol4 通配) 并加入 PATH, 供 npm 的 #!/usr/bin/env node 使用
+    # 定位 nodejs_v24 (优先应用卷 + /var/apps 软链) 并加入 PATH, 供 npm 的 #!/usr/bin/env node 使用
     NODE_DIR=""
-    for cand in /vol*/@appcenter/nodejs_v24/bin /var/apps/nodejs_v24/target/bin; do
+    for cand in "${APP_VOL}/@appcenter/nodejs_v24/bin" /var/apps/nodejs_v24/target/bin; do
         [ -x "$cand/node" ] && NODE_DIR="$cand" && break
     done
     if [ -n "${NODE_DIR}" ]; then
