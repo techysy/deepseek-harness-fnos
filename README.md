@@ -53,9 +53,12 @@ fnOS（飞牛私有云）
 
 - **dsh 绑 0.0.0.0**：通过 `cordis.patch.yml` 覆盖 webserver 配置，绕过 CLI 的 `--host 0.0.0.0` 安全校验（dsh CLI 会拒绝 0.0.0.0）
 - **browser-trust 围栏**：dsh 只信任回环地址或 `--trusted-host` 声明的来源访问 `/api/*`，否则返回 **HTTP 403**。`cmd/main` 启动时动态探测本机局域网 IP 并加入 `--trusted-host`
+- **settings 前端回环限制**：非 loopback（FN Connect 域名）访问时，settings 前端用 memory 模式导致**插件/模型配置空白页**，由 `patch_settings_memory.py` 固定为 `"host"` 模式解决
 - **统一网关代理（proxy.py）**：可选第二入口，转发并重写 Host 头规避 browser-trust，同时重写 HTML 绝对资源路径 + 注入 `<base>`，保证经 `/app/dsh` 访问资源不丢前缀
 - **FN Connect**：`http://dsh.<FN_ID>.fnos.net` 直接访问 （fn鉴权）
 - **离线打包**：dsh（含 node_modules）随 fpk 内置在 `app/server`，安装免联网
+
+> 📖 **回环限制详解**：browser-trust 围栏、trusted-host 机制、settings 前端 memory→host 的完整说明，见 [`docs/dsh-loopback-restriction.md`](docs/dsh-loopback-restriction.md)
 
 ## 🚀 安装
 
