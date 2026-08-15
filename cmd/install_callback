@@ -6,8 +6,23 @@ set -uo pipefail
 
 APP_NAME="${TRIM_APPNAME:-dsh}"
 APP_DIR="${TRIM_APPDEST:-/var/apps/${APP_NAME}}"
-APP_VOL="$(printf '%s' "${APP_DIR}" | sed -n 's#^\(/vol[^/]*\)/.*#\1#p')"
-DATA_DIR="${TRIM_PKGVAR:-${APP_VOL}/@appdata/${APP_NAME}}"
+APP_VOL=""
+if [ -n "${TRIM_PKGVAR:-}" ]; then
+    DATA_DIR="${TRIM_PKGVAR}"
+else
+    if [ -L "${APP_DIR}/home" ]; then
+        APP_HOME="$(readlink -f "${APP_DIR}/home")"
+        APP_VOL="$(printf '%s' "${APP_HOME}" | sed -n 's#^\(/vol[^/]*\)/.*#\1#p')"
+    fi
+    if [ -z "${APP_VOL}" ]; then
+        APP_VOL="$(printf '%s' "${APP_DIR}" | sed -n 's#^\(/vol[^/]*\)/.*#\1#p')"
+    fi
+    if [ -n "${APP_VOL}" ]; then
+        DATA_DIR="${APP_VOL}/@appdata/${APP_NAME}"
+    else
+        DATA_DIR="${APP_DIR}/var"
+    fi
+fi
 # APP_VOL 由 APP_DIR 提取 (同卷), 不写死 /vol4
 LOG="${DATA_DIR}/install.log"
 DSH_HOME="${DATA_DIR}/dsh_home"
