@@ -5,9 +5,9 @@ set -uo pipefail
 
 APP_NAME="${TRIM_APPNAME:-dsh}"
 APP_DIR="${TRIM_APPDEST:-/var/apps/${APP_NAME}}"
-DATA_DIR="${TRIM_PKGVAR:-/vol4/@appdata/${APP_NAME}}"
-# 动态获取应用所在卷 (从数据目录提取 /volX), 避免写死 /vol1 /vol4 撞到其他空间
-APP_VOL="$(printf '%s' "${DATA_DIR}" | sed -n 's#^\(/vol[^/]*\)/.*#\1#p')"
+APP_VOL="$(printf '%s' "${APP_DIR}" | sed -n 's#^\(/vol[^/]*\)/.*#\1#p')"
+DATA_DIR="${TRIM_PKGVAR:-${APP_VOL}/@appdata/${APP_NAME}}"
+# APP_VOL 由 APP_DIR 提取 (同卷), 不写死 /vol4
 
 # 端口: dsh web 绑 0.0.0.0 (经 cordis.patch.yml 覆盖 webserver host, 绕过 CLI 安全校验)
 # 局域网/Tailscale 可直接访问 NAS_IP:28000; 同时 proxy.py 经统一网关 /app/dsh 暴露

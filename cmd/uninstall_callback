@@ -4,7 +4,9 @@
 # 只清理运行时临时文件(日志/pid/配置回显缓存).
 set -uo pipefail
 APP_NAME="${TRIM_APPNAME:-dsh}"
-DATA_DIR="${TRIM_PKGVAR:-/vol4/@appdata/${APP_NAME}}"
+APP_VOL="$(printf '%s' "${APP_DIR}" | sed -n 's#^\(/vol[^/]*\)/.*#\1#p')"
+DATA_DIR="${TRIM_PKGVAR:-${APP_VOL}/@appdata/${APP_NAME}}"
+# APP_VOL 由 APP_DIR 提取 (同卷), 不写死 /vol4
 
 # 只清理运行时日志与 pid, 保留 dsh_home 用户数据 (工作空间/会话/API Key/代理)
 rm -f "${DATA_DIR}"/*.log "${DATA_DIR}"/*.pid 2>/dev/null || true

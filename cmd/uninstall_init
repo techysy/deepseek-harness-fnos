@@ -2,7 +2,9 @@
 # uninstall_init — 卸载前停止 dsh + proxy 进程
 set -uo pipefail
 APP_NAME="${TRIM_APPNAME:-dsh}"
-DATA_DIR="${TRIM_PKGVAR:-/vol4/@appdata/${APP_NAME}}"
+APP_VOL="$(printf '%s' "${APP_DIR}" | sed -n 's#^\(/vol[^/]*\)/.*#\1#p')"
+DATA_DIR="${TRIM_PKGVAR:-${APP_VOL}/@appdata/${APP_NAME}}"
+# APP_VOL 由 APP_DIR 提取 (同卷), 不写死 /vol4
 
 # 停 proxy
 if [ -f "${DATA_DIR}/proxy.pid" ]; then
