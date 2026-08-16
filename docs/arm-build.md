@@ -166,3 +166,63 @@ fi
 | `cmd/upgrade_callback` | 升级在线兜底逻辑 |
 | `cmd/patch_settings_memory.py` | settings 前端 patch（安装后自动应用） |
 | `app/server/package.json` | 在线安装依赖声明 `@deepseek-ai/dsh: ^0.1.0-rc.6` |
+
+---
+
+## 11. ARM 离线版（新增，2026-08）: GitHub Actions + manylinux 编译
+
+> 目标: 产出 **ARM 离线包** `dsh-<ver>-arm.fpk`（内置 ARM64 node_modules, 免联网）。
+> 相比 `all` 在线版（装时联网编译 5~20 分钟）, ARM 离线版装完即用。
+
+### 为什么需要 manylinux_2_28 容器
+
+目标 fnOS ARM 设备（如 R2S）是 Debian 12, glibc **2.36**。
+直接在 GitHub Actions `ubuntu-24.04-arm`（glibc 2.39）编译 node-pty 等原生模块,
+产物可能引用 GLIBC_2.37+ 符号, 在 glibc 2.36 设备上报 `GLIBC_2.3x not found`。
+
+manylinux_2_28 容器内 glibc = **2.28**, 在此编译 → 产物 GLIBC 要求 ≤ 2.28 < 2.36,
+任何 glibc ≥ 2.28 的环境都能跑。
+
+### 流程
+
+```
+[GitHub Actions: ubuntu-24.04-arm (免费, 原生 aarch64)]
+  ├─ manylinux_2_28_aarch64 容器内
+  │    ├─ 装 Node 24 官方 aarch64 二进制 (需 glibc≥2.28, 正好匹配)
+  │    └─ npm install @deepseek-ai/dsh@^0.1.0-rc.6
+  │        → node-pty 用容器内 gcc (glibc 2.28) 编译
+  │        → sharp 等用预编译 ARM 二进制
+  ├─ readelf 校验所有 .node 的 GLIBC 要求 ≤ 2.28
+  └─ 产出 node_modules-arm64.tar.gz (artifact)
+        │
+        ▼ 下载
+[101 (x86 fnOS)]
+  └─ package-arm-offline.sh:
+       ├─ 解压到 app/server/node_modules
+       ├─ manifest: platform = arm
+       ├─ fnpack build → dsh-<ver>-arm.fpk
+       └─ 交付到 /vol1/1000/fnOS App/fpk/deepseek-harness/
+```
+
+### 文件
+
+| 文件 | 说明 |
+|------|------|
+| `.github/workflows/build-arm-node-modules.yml` | CI: ARM64 runner 编译 ARM node_modules |
+| `scripts/build-arm-node-modules.sh` | manylinux 容器内 npm install + glibc 校验 |
+| `scripts/package-arm-offline.sh` | 101 上打 `-arm.fpk` 并交付 |
+
+### 用法
+
+1. 在 `deepseek-harness-fnos` 仓库 Actions → **Build ARM node_modules** → Run workflow
+2. 下载 artifact `node_modules-arm64-<sha>.tar.gz`
+3. 上传到 101, 运行:
+   ```bash
+   bash scripts/package-arm-offline.sh node_modules-arm64-<sha>.tar.gz
+   ```
+4. 产物 `dsh-<ver>-arm.fpk` 自动交付到 `/vol1/1000/fnOS App/fpk/deepseek-harness/`
+
+### 注意
+
+- 原生模块真正需编译的只有 **node-pty**; sharp 等自带预编译 ARM 二进制。
+- 若目标设备 glibc 更老 (< 2.28), 需改用更老的 manylinux 镜像, 或本地编译。
