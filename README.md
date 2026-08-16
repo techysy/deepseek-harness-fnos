@@ -68,7 +68,10 @@ fnOS（飞牛私有云）
 | 版本 | 适用 | 说明 |
 |------|------|------|
 | `dsh-<version>-x86.fpk` | x86 NAS | 离线包（含 node_modules），安装免联网 |
+| `dsh-<version>-arm.fpk` | ARM NAS | 离线包（含 ARM64 node_modules，glibc≤2.28 兼容），安装免联网 |
 | `dsh-<version>-all.fpk` | x86 / ARM NAS | 在线包，安装时联网编译原生模块（耗时较长） |
+
+> 每个架构同时提供 `-iframe` 变体（fnOS 桌面窗口内嵌）：`dsh-<version>[-iframe]-<arch>.fpk`。
 
 1. App Center **手动安装** 选下载的 fpk
 2. 安装向导填 DeepSeek API Key（sk- 开头，可留空后配置）

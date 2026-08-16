@@ -79,31 +79,62 @@ else
 fi
 grep -E '^(platform|appname|version)[[:space:]]*=' manifest
 
-# ---- 4. fnpack build ----
-echo "==> fnpack build ..."
-rm -f dsh.fpk
-fnpack build -d .
-[ -f "dsh.fpk" ] || { echo "错误: fnpack build 未产出 dsh.fpk" >&2; exit 1; }
+# ---- 4. fnpack build (url 版 + iframe 版两个变体) ----
+# 命名规范: dsh-<ver>[-iframe]-arm.fpk
+#   - url 版    → dsh-<ver>-arm.fpk
+#   - iframe 版 → dsh-<ver>-iframe-arm.fpk
+build_variant() {
+  local variant="$1"   # "" 或 "iframe"
+  local type_val="$2"  # "url" 或 "iframe"
+  local suffix="$3"    # "" 或 "-iframe"
 
-FPK="dsh-${VERSION}-arm.fpk"
-mv dsh.fpk "${FPK}"
-echo "==> 打包完成: ${SRC_DIR}/${FPK}"
-ls -lh "${FPK}"
+  # 切换 app/ui/config 的 type
+  sed -i "s/\"type\": \"[a-z]*\"/\"type\": \"${type_val}\"/" app/ui/config
+  echo "==> app/ui/config type = ${type_val}"
+
+  rm -f dsh.fpk
+  fnpack build -d .
+  [ -f "dsh.fpk" ] || { echo "错误: fnpack build 未产出 dsh.fpk (${variant})" >&2; exit 1; }
+
+  local fpk="dsh-${VERSION}${suffix}-arm.fpk"
+  mv dsh.fpk "${fpk}"
+  echo "==> 打包完成: ${SRC_DIR}/${fpk}"
+  ls -lh "${fpk}"
+  FPK="${fpk}"
+}
+
+# 备份原始 config
+cp app/ui/config "${WORKSPACE_BAK:-/tmp/dsh-ui-config.bak}"
+
+# 先打 url 版
+build_variant "url" "url" ""
+
+# 再打 iframe 版
+build_variant "iframe" "iframe" "-iframe"
+
+# 还原原始 config
+cp "${WORKSPACE_BAK:-/tmp/dsh-ui-config.bak}" app/ui/config
 
 # ---- 5. 复制到交付目录 (chmod 644) ----
 echo "==> 交付到 ${DELIVERY_NEW} ..."
 mkdir -p "${DELIVERY_NEW}" "${DELIVERY_OLD}"
+# 移走旧 ARM fpk 到历史
 if compgen -G "${DELIVERY_NEW}/dsh-*-arm.fpk" >/dev/null 2>&1; then
   mv "${DELIVERY_NEW}"/dsh-*-arm.fpk "${DELIVERY_OLD}/" 2>/dev/null || true
 fi
-cp "${FPK}" "${DELIVERY_NEW}/"
-chmod 644 "${DELIVERY_NEW}/${FPK}"
+# 复制本批两个变体
+for f in dsh-${VERSION}-arm.fpk dsh-${VERSION}-iframe-arm.fpk; do
+  [ -f "$f" ] || { echo "警告: $f 不存在, 跳过交付" >&2; continue; }
+  cp "$f" "${DELIVERY_NEW}/"
+  chmod 644 "${DELIVERY_NEW}/${f}"
+done
 
 echo ""
 echo "==============================================================="
 echo "✅ ARM 离线安装包已生成并交付:"
-echo "   ${DELIVERY_NEW}/${FPK}"
+echo "   ${DELIVERY_NEW}/dsh-${VERSION}-arm.fpk         (url 版)"
+echo "   ${DELIVERY_NEW}/dsh-${VERSION}-iframe-arm.fpk  (iframe 版)"
 echo ""
-echo "   部署到 ARM fnOS 设备: 应用中心 → 手动安装 → 选此 fpk"
-echo "   说明: 此包内置 ARM64 node_modules (glibc≤2.28 兼容), 免联网"
+echo "   部署到 ARM fnOS 设备: 应用中心 → 手动安装 → 选对应架构 fpk"
+echo "   说明: 内置 ARM64 node_modules (glibc≤2.28 兼容), 免联网"
 echo "==============================================================="
