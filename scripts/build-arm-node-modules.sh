@@ -62,7 +62,7 @@ docker run --rm \
   -w /work/server \
   -e NODE_MAJOR \
   -e npm_config_jobs=2 \
-  -e npm_config_cache=/work/server/.npm-cache \
+  -e npm_config_cache=/tmp/npm-cache \
   "${MANYLINUX_IMAGE}" \
   bash -euxo pipefail -c '
     set -euo pipefail
@@ -77,7 +77,11 @@ docker run --rm \
     mkdir -p node_modules
 
     # npm install (native 模块在此 glibc 2.28 环境下编译)
+    # npm cache 放容器内 /tmp, 避免落到宿主管控目录 (root 归属, 宿主无法清理)
     npm install --no-audit --no-fund --ignore-engines
+
+    # 将产物改为宿主可读可删 (node_modules 由 root 创建, 确保宿主能接管)
+    chown -R "$(stat -c %u:%g /work/server)" node_modules 2>/dev/null || true
 
     # 输出原生模块信息
     echo "--- 原生模块列表 ---"
@@ -116,7 +120,7 @@ fi
 # --- 打包归档 (不含 .npm-cache) ---
 echo "==> 打包 node_modules-arm64.tar.gz ..."
 cd "${APP_SERVER_DIR}"
-rm -rf .npm-cache
+rm -rf .npm-cache 2>/dev/null || true
 tar -czf node_modules-arm64.tar.gz \
   package.json package-lock.json node_modules
 echo "==> 完成! 归档: ${APP_SERVER_DIR}/node_modules-arm64.tar.gz"
