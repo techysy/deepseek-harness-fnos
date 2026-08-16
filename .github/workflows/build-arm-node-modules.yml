@@ -1,0 +1,100 @@
+name: Build ARM node_modules
+
+
+
+on:
+
+  workflow_dispatch:
+
+    inputs:
+
+      dsh_version:
+
+        description: '要安装的 @deepseek-ai/dsh 版本 (例如 ^0.1.0-rc.6; 留空用 package.json 声明)'
+
+        required: false
+
+        default: ''
+
+
+
+concurrency:
+
+  group: build-arm-node-modules-${{ github.ref }}
+
+  cancel-in-progress: true
+
+
+
+jobs:
+
+  build-arm-node-modules:
+
+    runs-on: ubuntu-24.04-arm
+
+    timeout-minutes: 60
+
+    steps:
+
+      - name: Checkout deepseek-harness-fnos
+
+        uses: actions/checkout@v4
+
+
+
+      - name: Show runner architecture
+
+        run: |
+
+          uname -m
+
+          ldd --version | head -1
+
+          docker --version          
+
+
+
+      - name: (可选) 覆盖 @deepseek-ai/dsh 版本
+
+        if: github.event.inputs.dsh_version != ''
+
+        run: |
+
+          cd app/server
+
+          npm pkg set "dependencies.@deepseek-ai/dsh=${{ github.event.inputs.dsh_version }}"          
+
+
+
+      - name: 在 manylinux_2_28 容器内编译 ARM64 node_modules
+
+        run: bash scripts/build-arm-node-modules.sh app/server
+
+
+
+      - name: 校验产物存在且含 ARM64 二进制
+
+        run: |
+
+          cd app/server
+
+          ls -lh node_modules-arm64.tar.gz
+
+          find node_modules -name "*.node" -type f | head -1 | xargs -I{} file {} 2>/dev/null || true          
+
+
+
+      - name: Upload ARM64 node_modules artifact
+
+        uses: actions/upload-artifact@v4
+
+        with:
+
+          name: node_modules-arm64-${{ github.sha }}
+
+          path: app/server/node_modules-arm64.tar.gz
+
+          if-no-files-found: error
+
+          retention-days: 14
+
