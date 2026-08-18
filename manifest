@@ -1,8 +1,8 @@
 appname               = dsh
 version               = 0.1.0-rc.7
 display_name          = DeepSeek Harness
-desc                  = DeepSeek Harness — DeepSeek 官方 agent 浏览器 UI（上游 deepseek-ai/deepseek-harness 0.1.0-rc.6），本地常驻服务，打包为飞牛 fnOS 应用
-changelog             = 版本号对齐官方 0.1.0-rc.6
+desc                  = DeepSeek Harness — DeepSeek 官方 agent 浏览器 UI（上游 deepseek-ai/deepseek-harness 0.1.0-rc.7），本地常驻服务，打包为飞牛 fnOS 应用
+changelog             = 版本号对齐官方 0.1.0-rc.7 + crypto.randomUUID polyfill
 platform               = x86
 micro_app             = true
 source                = thirdparty

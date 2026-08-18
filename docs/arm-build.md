@@ -78,7 +78,7 @@ platform = x86
 ```bash
 cd repo
 fnpack build
-mv dsh.fpk dsh-0.1.0-rc.6-x86.fpk
+mv dsh.fpk dsh-0.1.0-rc.7-x86.fpk
 ```
 
 ---
@@ -99,12 +99,12 @@ mv app/server/node_modules /tmp/node_modules_backup
 ### 6.2 打包
 ```bash
 fnpack build
-mv dsh.fpk dsh-0.1.0-rc.6-all.fpk
+mv dsh.fpk dsh-0.1.0-rc.7-all.fpk
 ```
 
 ### 6.3 验证不含 node_modules
 ```bash
-tar tzf dsh-0.1.0-rc.6-all.fpk 2>/dev/null | grep -c "server/node_modules"   # 期望 0
+tar tzf dsh-0.1.0-rc.7-all.fpk 2>/dev/null | grep -c "server/node_modules"   # 期望 0
 ```
 
 ### 6.4 恢复工作区
@@ -121,7 +121,7 @@ mv /tmp/node_modules_backup app/server/node_modules
 
 ```bash
 if [ ! -f "${DSH_OFFLINE}" ]; then
-    ( cd "${APP_DIR}/server" && npm install @deepseek-ai/dsh@^0.1.0-rc.6 )
+    ( cd "${APP_DIR}/server" && npm install @deepseek-ai/dsh@^0.1.0-rc.7 )
 fi
 ```
 
@@ -165,7 +165,7 @@ fi
 | `cmd/install_callback` | 在线安装兜底逻辑 |
 | `cmd/upgrade_callback` | 升级在线兜底逻辑 |
 | `cmd/patch_settings_memory.py` | settings 前端 patch（安装后自动应用） |
-| `app/server/package.json` | 在线安装依赖声明 `@deepseek-ai/dsh: ^0.1.0-rc.6` |
+| `app/server/package.json` | 在线安装依赖声明 `@deepseek-ai/dsh: ^0.1.0-rc.7` |
 
 ---
 
@@ -189,7 +189,7 @@ manylinux_2_28 容器内 glibc = **2.28**, 在此编译 → 产物 GLIBC 要求 
 [GitHub Actions: ubuntu-24.04-arm (免费, 原生 aarch64)]
   ├─ manylinux_2_28_aarch64 容器内
   │    ├─ 装 Node 24 官方 aarch64 二进制 (需 glibc≥2.28, 正好匹配)
-  │    └─ npm install @deepseek-ai/dsh@^0.1.0-rc.6
+  │    └─ npm install @deepseek-ai/dsh@^0.1.0-rc.7
   │        → node-pty 用容器内 gcc (glibc 2.28) 编译
   │        → sharp 等用预编译 ARM 二进制
   ├─ readelf 校验所有 .node 的 GLIBC 要求 ≤ 2.28

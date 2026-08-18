@@ -3,9 +3,9 @@
 - 交付 `dsh-0.1.0-rc.7-{all,iframe-all,x86,iframe-x86}.fpk`
 # CHANGELOG
 
-## 0.1.0-rc.6 (2026-08-14)
+## 0.1.0-rc.7 (2026-08-14)
 
-> 版本号对齐官方 `@deepseek-ai/dsh`（deepseek-ai/deepseek-harness 0.1.0-rc.6）。历史迭代详情（0.0.1~0.0.15，原始 1.0.0~1.0.14）见 `test log.md`。
+> 版本号对齐官方 `@deepseek-ai/dsh`（deepseek-ai/deepseek-harness 0.1.0-rc.7）。历史迭代详情（0.0.1~0.0.15，原始 1.0.0~1.0.14）见 `test log.md`。
 
 ### 核心功能
 - **dsh web 常驻服务**：`dsh web` 局域网直连 `0.0.0.0:28000`（经 cordis.patch.yml 覆盖，绕过 CLI 0.0.0.0 校验）

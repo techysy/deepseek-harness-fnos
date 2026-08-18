@@ -23,7 +23,7 @@
 
 ## 📦 安装
 
-1. 在 **飞牛应用中心** 搜索 `DeepSeek Harness`，或从项目 [GitHub Release](https://github.com/techysy/deepseek-harness-fnos/releases) 下载 `dsh-0.1.0-rc.6.fpk` 手动安装
+1. 在 **飞牛应用中心** 搜索 `DeepSeek Harness`，或从项目 [GitHub Release](https://github.com/techysy/deepseek-harness-fnos/releases) 下载 `dsh-0.1.0-rc.7.fpk` 手动安装
 2. 安装向导填 **DeepSeek API Key**（`sk-` 开头，可从 [platform.deepseek.com](https://platform.deepseek.com) 获取；**可留空**，之后在应用内配置）
 3. 装完在桌面上点开 DSH 图标，或手机/电脑浏览器访问 `http://<NAS_IP>:28000`
 

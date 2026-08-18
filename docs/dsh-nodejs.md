@@ -100,7 +100,7 @@ export NODE_OPTIONS="--max-old-space-size=512"
 mkdir -p "${DATA_DIR}/.npm"
 export HOME="${DATA_DIR}"
 
-( cd "${APP_DIR}/server" && npm install @deepseek-ai/dsh@^0.1.0-rc.6 )
+( cd "${APP_DIR}/server" && npm install @deepseek-ai/dsh@^0.1.0-rc.7 )
 ```
 
 > **HOME 陷阱**：若用户主目录不存在（如 `/home/admin`），npm 写缓存会报 `EACCES`。
