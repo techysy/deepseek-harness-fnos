@@ -112,6 +112,17 @@ def _rewrite_html(data: bytes) -> bytes:
     ).replace(
         'href="/favicon', f'href="{GATEWAY_PREFIX}/favicon'
     )
+    # 注入 crypto.randomUUID polyfill (fnOS iframe 非安全上下文, 该 API 不可用)
+    if text.startswith("<!doctype html") and "crypto.randomUUID" not in text:
+        polyfill = (
+            '<script>'
+            'if(!crypto.randomUUID){'
+            'crypto.randomUUID=function(){'
+            'return"xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g,function(c){'
+            'var r=Math.random()*16|0,v=c==="x"?r:(r&0x3|0x8);return v.toString(16);});};}'
+            '</script>'
+        )
+        text = text.replace("<head>", f"<head>{polyfill}", 1)
     # 注入 <base> 兜底 (相对路径)
     if text.startswith("<!doctype html") and "<base" not in text:
         text = text.replace(
