@@ -33,3 +33,9 @@ bash scripts/build.sh --formal   # 正式版
 ## 安装
 
 fnOS 应用中心手动安装 `dsh-*.fpk`。
+
+## 文档
+
+- [同步上游后检查清单](docs/upstream-sync-checklist.md) — 每次同步上游/重装后验证本地补丁（crypto polyfill、特权 API 403、trusted-host）是否还在
+- [ARM 离线打包](docs/arm-build.md)
+- [dsh Node.js 自托管](docs/dsh-nodejs.md)
