@@ -34,8 +34,27 @@ bash scripts/build.sh --formal   # 正式版
 
 fnOS 应用中心手动安装 `dsh-*.fpk`。
 
+## Agent 环境命令检查
+
+安装后可在 dsh 的 Agent / bash 工具里直接使用以下命令（来自 fnOS 依赖应用，自动加入 PATH）：
+
+| 命令 | 来源 | 版本验证 | 数据落点 |
+|------|------|---------|---------|
+| `node` | nodejs_v24 依赖 | `node -v` | — |
+| `npm` / `npx` | nodejs_v24 | `npm -v` | 全局安装 → 数据区 `.npm-global` |
+| `pnpm` / `yarn` | corepack（nodejs_v24） | `pnpm --version` | corepack 缓存 → 数据区 `.corepack` |
+| `bun` | bunjs 依赖 | `bun --version` | — |
+| `corepack` | nodejs_v24 | `corepack --version` | — |
+
+```bash
+# 一键验证全部命令
+node -v && npm -v && pnpm --version && yarn --version && bun --version
+```
+
+> 依赖声明：`install_dep_apps = nodejs_v24:bunjs`，安装 dsh 时 fnOS 自动启用 node + bun。
+
 ## 文档
 
-- [同步上游后检查清单](docs/upstream-sync-checklist.md) — 每次同步上游/重装后验证本地补丁（crypto polyfill、特权 API 403、trusted-host）是否还在
+- [同步上游后检查清单](docs/upstream-sync-checklist.md) — 每次同步上游/重装后验证本地补丁（crypto polyfill、特权 API 403、trusted-host、命令可用性）是否还在
 - [ARM 离线打包](docs/arm-build.md)
 - [dsh Node.js 自托管](docs/dsh-nodejs.md)
