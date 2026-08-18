@@ -1,10 +1,17 @@
-# DeepSeek Harness for fnOS
+# 🚀 DeepSeek Harness for fnOS
+
+[![GitHub release](https://img.shields.io/github/v/release/techysy/deepseek-harness-fnos?label=Latest&color=blue)](https://github.com/techysy/deepseek-harness-fnos/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://github.com/techysy/deepseek-harness-fnos/blob/main/LICENSE)
+[![dsh](https://img.shields.io/badge/dsh-0.1.0--rc.7-blueviolet.svg)](https://github.com/deepseek-ai/deepseek-harness)
+[![fnOS](https://img.shields.io/badge/fnOS-1.1.31xx+-orange.svg)](https://developer.fnnas.com/docs/guide)
+[![Node.js](https://img.shields.io/badge/Node.js-v24-green.svg)]()
+[![bun](https://img.shields.io/badge/bun-v1.3.9-black.svg)]()
 
 DeepSeek 官方 Agent 浏览器 UI（一切皆插件）的 fnOS 快捷入口。
 
-- 目标：https://www.deepseek.com/harness/（DeepSeek Harness 开发者预览版）
-- 纯空壳：不运行后端，桌面图标打开 DeepSeek Harness。
-- 图标：DeepSeek 官方黑色鲸鱼 logo。
+- 🎯 目标：https://www.deepseek.com/harness/（DeepSeek Harness 开发者预览版）
+- 🐳 纯空壳：不运行后端，桌面图标打开 DeepSeek Harness。
+- 🐋 图标：DeepSeek 官方黑色鲸鱼 logo。
 
 ## 下载安装
 
