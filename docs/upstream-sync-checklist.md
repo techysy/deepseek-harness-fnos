@@ -76,3 +76,15 @@ grep '"version"' app/server/node_modules/@deepseek-ai/dsh/package.json   # 上�
 - **fpk 重装会重写前端产物**：补丁必须内嵌进 fpk（patch 脚本随包携带），不能只改运行实例
 - **trusted_hosts.conf 里写了 `http://域名/`**：必须去掉 scheme 和尾斜杠，否则整个信任列表加载失败（404 秒杀现象 = 全 API 403）
 - **先看运行实例还是构建目录**：改完要分别确认 `/vol4/@appcenter/<app>/server/node_modules/`（运行）与构建目录 `app/server/node_modules/`（打包源）两处
+
+## pnpm 集成（Agent 环境）
+
+nodejs_v24 自带 corepack，dsh 的 agent 环境（bash 工具）应能用 `pnpm` 跑项目/装依赖。cmd/main 启动时把 corepack shims 加入 PATH 并设 `COREPACK_HOME` 到数据区。
+
+验证（安装后）：
+```bash
+# 在 dsh agent 的 bash 里
+pnpm --version          # 期望输出版本号 (如 11.x)
+```
+
+同步上游后检查：`grep -c 'corepack' cmd/main` 应 ≥1。

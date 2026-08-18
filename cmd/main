@@ -190,6 +190,23 @@ PATCHPY
             *":${NODE_BIN_DIR}:"*) : ;;
             *) export PATH="${NODE_BIN_DIR}:${PATH}" ;;
         esac
+        # corepack shims (pnpm/yarn) 加入 PATH: nodejs_v24 的 corepack 提供 pnpm 命令,
+        # 供 dsh agent 环境直接调用. shims 位于 <prefix>/lib/node_modules/corepack/shims
+        for cand in \
+            "$(dirname "${NODE_BIN_DIR}")/lib/node_modules/corepack/shims" \
+            "${NODE_BIN_DIR}/lib/node_modules/corepack/shims"; do
+            if [ -d "${cand}" ]; then
+                case ":${PATH}:" in
+                    *":${cand}:"*) : ;;
+                    *) export PATH="${cand}:${PATH}" ;;
+                esac
+                # 固定 pnpm 版本 + 缓存目录放数据区 (避免每次重下, 也避免占用系统盘)
+                export COREPACK_HOME="${DSH_HOME}/.corepack" 2>/dev/null || true
+                export COREPACK_DEFAULT_TO_LATEST=0
+                log "corepack shims: ${cand} (pnpm available, COREPACK_HOME=${DSH_HOME}/.corepack)"
+                break
+            fi
+        done
         log "dsh self-hosting node via: ${NODE_BIN}"
     fi
     DSH_HOME="${DSH_HOME}" nohup "${DSH_BIN}" ${DSH_ARGS:-} web --port "${DSH_PORT}" ${TRUSTED_HOST_ARGS} \
