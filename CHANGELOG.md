@@ -1,3 +1,6 @@
+## 0.1.0-rc.7 (2026-08-19)
+- **版本号对齐上游**：bump 到 `@deepseek-ai/dsh@0.1.0-rc.7`（npm latest/next），重新构建离线 x86 node_modules（NAS glibc 2.36 环境编译）
+- 交付 `dsh-0.1.0-rc.7-{all,iframe-all,x86,iframe-x86}.fpk`
 # CHANGELOG
 
 ## 0.1.0-rc.6 (2026-08-14)
