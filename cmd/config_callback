@@ -1,8 +1,9 @@
 #!/bin/bash
-# config_callback — 保存 fnOS 应用设置页配置 (网络代理 + FN Connect 域名)
+# config_callback — 保存 fnOS 应用设置页配置 (网络代理 + FN Connect ID)
 # fnOS 设置页保存时运行. 字段为裸 env var (无 wizard_ 前缀, 与 install 向导不同).
 # 代理: 由 proxy_ip + proxy_port 拼成 PROXY=http://IP:port; 两者都填才更新; 留空保留当前值.
-# FN Connect 域名: fnos_domain 写入 trusted_hosts.conf (单个域名); 非空才更新; 留空保留当前值.
+# FN Connect ID: 只填 ID (如 techysy), 自动拼成 <id>.fnos.net + fnos.net 两个信任域写入
+#   trusted_hosts.conf; 覆盖 https://<id>.fnos.net/ 与 https://fnos.net/<id> 两种 FN Connect 域名.
 set -uo pipefail
 
 APP_NAME="${TRIM_APPNAME:-dsh}"
@@ -28,7 +29,7 @@ LOG="${DATA_DIR}/config.log"
 DSH_HOME="${DATA_DIR}/dsh_home"
 
 mkdir -p "${DSH_HOME}" 2>/dev/null
-echo "[$(date '+%F %T')] config_callback start (user=$(id -un)) proxy_ip='${proxy_ip:-}' proxy_port='${proxy_port:-}' fnos_domain='${fnos_domain:-}'" >> "${LOG}"
+echo "[$(date '+%F %T')] config_callback start (user=$(id -un)) proxy_ip='${proxy_ip:-}' proxy_port='${proxy_port:-}' fnos_id='${fnos_id:-}'" >> "${LOG}"
 
 # 组装代理: 仅当 IP 和端口都填了才写 (留空保留当前 proxy.conf, 不置空)
 if [ -n "${proxy_ip:-}" ] && [ -n "${proxy_port:-}" ]; then
@@ -40,14 +41,23 @@ else
     echo "[$(date '+%F %T')] proxy ip/port empty; keep current proxy.conf" >> "${LOG}"
 fi
 
-# 保存 FN Connect 域名到 trusted_hosts.conf (单个域名; 留空保留当前值, 不置空)
-if [ -n "${fnos_domain:-}" ]; then
-    printf '%s\n' "${fnos_domain}" > "${DSH_HOME}/trusted_hosts.conf" 2>/dev/null
-    chmod 600 "${DSH_HOME}/trusted_hosts.conf" 2>/dev/null
-    chown "${APP_NAME:-dsh}:${APP_NAME:-dsh}" "${DSH_HOME}/trusted_hosts.conf" 2>/dev/null || true
-    echo "[$(date '+%F %T')] updated trusted_hosts.conf: ${fnos_domain}" >> "${LOG}"
+# 保存 FN Connect ID 自动拼信任域到 trusted_hosts.conf (每行一个 hostname; 留空保留当前值)
+# 只填 ID (如 techysy) → 生成 <id>.fnos.net (https://<id>.fnos.net/) + fnos.net (https://fnos.net/<id>)
+if [ -n "${fnos_id:-}" ]; then
+    FN_ID="$(printf '%s' "${fnos_id}" | tr -d '[:space:]' | sed 's#^https\?://##; s#/$##; s#\.fnos\.net$##')"
+    if [ -n "${FN_ID}" ]; then
+        {
+            printf '%s\n' "${FN_ID}.fnos.net"
+            printf '%s\n' "fnos.net"
+        } > "${DSH_HOME}/trusted_hosts.conf" 2>/dev/null
+        chmod 600 "${DSH_HOME}/trusted_hosts.conf" 2>/dev/null
+        chown "${APP_NAME:-dsh}:${APP_NAME:-dsh}" "${DSH_HOME}/trusted_hosts.conf" 2>/dev/null || true
+        echo "[$(date '+%F %T')] updated trusted_hosts.conf: ${FN_ID}.fnos.net + fnos.net (FN ID: ${FN_ID})" >> "${LOG}"
+    else
+        echo "[$(date '+%F %T')] fnos_id empty after normalize; keep current trusted_hosts.conf" >> "${LOG}"
+    fi
 else
-    echo "[$(date '+%F %T')] fnos_domain empty; keep current trusted_hosts.conf" >> "${LOG}"
+    echo "[$(date '+%F %T')] fnos_id empty; keep current trusted_hosts.conf" >> "${LOG}"
 fi
 
 echo "[$(date '+%F %T')] config_callback done" >> "${LOG}"
