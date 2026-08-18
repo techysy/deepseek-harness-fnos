@@ -79,12 +79,19 @@ grep '"version"' app/server/node_modules/@deepseek-ai/dsh/package.json   # 上�
 
 ## pnpm 集成（Agent 环境）
 
-nodejs_v24 自带 corepack，dsh 的 agent 环境（bash 工具）应能用 `pnpm` 跑项目/装依赖。cmd/main 启动时把 corepack shims 加入 PATH 并设 `COREPACK_HOME` 到数据区。
+nodejs_v24 自带 corepack，dsh 的 agent 环境（bash 工具）应能用 `pnpm`/`yarn`/`bun` 跑项目/装依赖。cmd/main 启动时把 corepack shims + bunjs bin 加入 PATH 并设 `COREPACK_HOME` 到数据区。
+
+依赖声明：`manifest` 的 `install_dep_apps = nodejs_v24:bunjs`（fnOS 自动装/启用 node + bun）。
 
 验证（安装后）：
 ```bash
 # 在 dsh agent 的 bash 里
-pnpm --version          # 期望输出版本号 (如 11.x)
+node -v && npm -v && pnpm --version && yarn --version && bun --version
 ```
 
-同步上游后检查：`grep -c 'corepack' cmd/main` 应 ≥1。
+同步上游后检查：
+```bash
+grep -c 'corepack' cmd/main        # 期望 ≥1 (pnpm/yarn shims)
+grep -c 'bunjs' cmd/main           # 期望 ≥1 (bun PATH)
+grep 'install_dep_apps' manifest   # 期望 nodejs_v24:bunjs
+```

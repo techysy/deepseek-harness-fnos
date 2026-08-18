@@ -207,6 +207,17 @@ PATCHPY
                 break
             fi
         done
+        # bun (fnOS 依赖应用 bunjs): 把 bin 加入 PATH, 供 dsh agent 环境调用
+        for cand in /var/apps/bunjs/target/bin "${APP_VOL:-}/@appcenter/bunjs/bin"; do
+            if [ -x "${cand}/bun" ]; then
+                case ":${PATH}:" in
+                    *":${cand}:"*) : ;;
+                    *) export PATH="${cand}:${PATH}" ;;
+                esac
+                log "bun available via: ${cand}/bun"
+                break
+            fi
+        done
         log "dsh self-hosting node via: ${NODE_BIN}"
     fi
     DSH_HOME="${DSH_HOME}" nohup "${DSH_BIN}" ${DSH_ARGS:-} web --port "${DSH_PORT}" ${TRUSTED_HOST_ARGS} \

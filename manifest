@@ -15,4 +15,4 @@ desktop_applaunchname = dsh.Application
 service_port          = 28000
 ctl_stop              = true
 checkport             = false
-install_dep_apps      = nodejs_v24
+install_dep_apps      = nodejs_v24:bunjs
