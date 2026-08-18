@@ -95,3 +95,17 @@ grep -c 'corepack' cmd/main        # 期望 ≥1 (pnpm/yarn shims)
 grep -c 'bunjs' cmd/main           # 期望 ≥1 (bun PATH)
 grep 'install_dep_apps' manifest   # 期望 nodejs_v24:bunjs
 ```
+
+## FN Connect ID 信任域（设置页）
+
+设置页只填 **FN ID**（如 `techysy`），回调自动拼成两个信任域写入 `trusted_hosts.conf`：
+- `https://<id>.fnos.net/` → `<id>.fnos.net`
+- `https://fnos.net/<id>` → `fnos.net`
+
+验证：
+```bash
+cat ${DSH_HOME}/trusted_hosts.conf   # 期望两行: <id>.fnos.net + fnos.net
+ps aux | grep 'dsh.*web' | grep -v grep | grep -o 'trusted-host fnos.net'  # 默认已加
+```
+
+同步上游后检查：`grep -c 'fnos_id' cmd/config_callback` 应 ≥1（FN ID 机制仍在）。
