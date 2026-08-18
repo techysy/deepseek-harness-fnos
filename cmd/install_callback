@@ -66,11 +66,12 @@ if [ -n "${wizard_fnos_id:-}" ]; then
     if [ -n "${FN_ID}" ]; then
         {
             printf '%s\n' "${FN_ID}.fnos.net"
+            printf '%s\n' "dsh.${FN_ID}.fnos.net"
             printf '%s\n' "fnos.net"
         } > "${DSH_HOME}/trusted_hosts.conf" 2>/dev/null
         chmod 600 "${DSH_HOME}/trusted_hosts.conf" 2>/dev/null
         chown "${APP_NAME:-dsh}:${APP_NAME:-dsh}" "${DSH_HOME}/trusted_hosts.conf" 2>/dev/null || true
-        echo "[$(date '+%F %T')] saved wizard FN ID to trusted_hosts.conf: ${FN_ID}.fnos.net + fnos.net" >> "${LOG}"
+        echo "[$(date '+%F %T')] saved wizard FN ID to trusted_hosts.conf: ${FN_ID}.fnos.net + dsh.${FN_ID}.fnos.net + fnos.net" >> "${LOG}"
     else
         echo "[$(date '+%F %T')] wizard_fnos_id empty after normalize; keep current trusted_hosts.conf" >> "${LOG}"
     fi

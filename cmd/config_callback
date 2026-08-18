@@ -42,17 +42,21 @@ else
 fi
 
 # 保存 FN Connect ID 自动拼信任域到 trusted_hosts.conf (每行一个 hostname; 留空保留当前值)
-# 只填 ID (如 techysy) → 生成 <id>.fnos.net (https://<id>.fnos.net/) + fnos.net (https://fnos.net/<id>)
+# 只填 ID (如 techysy) → 生成三个信任域:
+#   <id>.fnos.net        (https://<id>.fnos.net/)
+#   dsh.<id>.fnos.net    (https://dsh.<id>.fnos.net/ — FN Connect 应用子域)
+#   fnos.net             (https://fnos.net/<id>)
 if [ -n "${fnos_id:-}" ]; then
     FN_ID="$(printf '%s' "${fnos_id}" | tr -d '[:space:]' | sed 's#^https\?://##; s#/$##; s#\.fnos\.net$##')"
     if [ -n "${FN_ID}" ]; then
         {
             printf '%s\n' "${FN_ID}.fnos.net"
+            printf '%s\n' "dsh.${FN_ID}.fnos.net"
             printf '%s\n' "fnos.net"
         } > "${DSH_HOME}/trusted_hosts.conf" 2>/dev/null
         chmod 600 "${DSH_HOME}/trusted_hosts.conf" 2>/dev/null
         chown "${APP_NAME:-dsh}:${APP_NAME:-dsh}" "${DSH_HOME}/trusted_hosts.conf" 2>/dev/null || true
-        echo "[$(date '+%F %T')] updated trusted_hosts.conf: ${FN_ID}.fnos.net + fnos.net (FN ID: ${FN_ID})" >> "${LOG}"
+        echo "[$(date '+%F %T')] updated trusted_hosts.conf: ${FN_ID}.fnos.net + dsh.${FN_ID}.fnos.net + fnos.net (FN ID: ${FN_ID})" >> "${LOG}"
     else
         echo "[$(date '+%F %T')] fnos_id empty after normalize; keep current trusted_hosts.conf" >> "${LOG}"
     fi

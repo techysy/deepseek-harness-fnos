@@ -101,11 +101,16 @@ grep 'install_dep_apps' manifest   # 期望 nodejs_v24:bunjs
 设置页只填 **FN ID**（如 `techysy`），回调自动拼成两个信任域写入 `trusted_hosts.conf`：
 - `https://<id>.fnos.net/` → `<id>.fnos.net`
 - `https://fnos.net/<id>` → `fnos.net`
+- `https://dsh.<id>.fnos.net/` → `dsh.<id>.fnos.net`（FN Connect 应用子域，实际访问入口）
 
 验证：
 ```bash
-cat ${DSH_HOME}/trusted_hosts.conf   # 期望两行: <id>.fnos.net + fnos.net
+cat ${DSH_HOME}/trusted_hosts.conf   # 期望三行: <id>.fnos.net + dsh.<id>.fnos.net + fnos.net
 ps aux | grep 'dsh.*web' | grep -v grep | grep -o 'trusted-host fnos.net'  # 默认已加
 ```
 
 同步上游后检查：`grep -c 'fnos_id' cmd/config_callback` 应 ≥1（FN ID 机制仍在）。
+
+> 注意：`fnos.net` 是精确 hostname 匹配，**匹配不了子域**（`dsh.<id>.fnos.net` 需显式加入）。
+> FN Connect 应用子域 `dsh.<id>.fnos.net` 若外部访问 403，先确认 FN Connect 后台已发布该应用，
+> 而非 dsh 问题（nginx 网关 403 ≠ dsh fence 403）。
