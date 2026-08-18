@@ -1,5 +1,9 @@
 ## 0.1.0-rc.7 (2026-08-19)
 - **版本号对齐上游**：bump 到 `@deepseek-ai/dsh@0.1.0-rc.7`（npm latest/next），重新构建离线 x86 node_modules（NAS glibc 2.36 环境编译）
+- **Agent 环境集成 pnpm**：corepack shims 加入 PATH，dsh 内 bash 可直接 `pnpm` 跑项目（COREPACK_HOME 指向数据区持久缓存）
+- **修复特权 API 403**：放宽 `/api/settings.*` 回环钉扎，局域网直连不再 `HTTP 403`
+- **crypto.randomUUID polyfill**：注入 index.html（fnOS iframe 非安全上下文兼容）
+- **默认 trusted-host 加 fnos.net** + trusted_hosts.conf 自动清理非法格式
 - 交付 `dsh-0.1.0-rc.7-{all,iframe-all,x86,iframe-x86}.fpk`
 # CHANGELOG
 
