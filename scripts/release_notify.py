@@ -99,9 +99,9 @@ def build_card(repo: str, tag: str, rel: dict, readme: str = "") -> dict:
     fields = []
     assets = rel.get("assets") or []
     if assets:
-        fields.append({"is_short": True, "text": f"**📦 资产**\n{len(assets)} 个"})
+        fields.append({"is_short": True, "text": {"tag": "lark_md", "content": f"**📦 资产**\n{len(assets)} 个"}})
     if rel.get("published_at"):
-        fields.append({"is_short": True, "text": f"**🕒 发布时间**\n{rel['published_at'][:10]}"})
+        fields.append({"is_short": True, "text": {"tag": "lark_md", "content": f"**🕒 发布时间**\n{rel['published_at'][:10]}"}})
     if fields:
         elements.append({"tag": "div", "fields": fields})
         elements.append({"tag": "hr"})
