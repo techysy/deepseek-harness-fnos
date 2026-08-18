@@ -207,6 +207,12 @@ PATCHPY
                 break
             fi
         done
+        # npm 全局 prefix 指向数据区: 避免读到 /home/<user>/.npmrc 的 prefix 导致
+        # "config prefix cannot be changed from project config" 且全局安装落系统盘.
+        mkdir -p "${DSH_HOME}/.npm-global" 2>/dev/null || true
+        export npm_config_prefix="${DSH_HOME}/.npm-global"
+        export npm_config_cache="${DSH_HOME}/.npm" 2>/dev/null || true
+        log "npm prefix -> ${DSH_HOME}/.npm-global (数据区)"
         # bun (fnOS 依赖应用 bunjs): 把 bin 加入 PATH, 供 dsh agent 环境调用
         for cand in /var/apps/bunjs/target/bin "${APP_VOL:-}/@appcenter/bunjs/bin"; do
             if [ -x "${cand}/bun" ]; then
