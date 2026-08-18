@@ -134,14 +134,53 @@ PATCHEOF
     for ip in ${LAN_IPS}; do
         TRUSTED_HOST_ARGS="${TRUSTED_HOST_ARGS} --trusted-host ${ip}"
     done
-    # 读取用户配置的 FN Connect 域名 (FN ID), 单行一个域名, 追加到 --trusted-host.
-    # 配置在 ${DSH_HOME}/trusted_hosts.conf, 与 proxy.conf 机制一致; 取首个非空行.
+    # 内置默认 trusted-host: fnos.net (FN Connect 域名) + 本机非回环 IP.
+    TRUSTED_HOST_ARGS="${TRUSTED_HOST_ARGS} --trusted-host fnos.net"
+    # 读取用户配置的 FN Connect 域名 (FN ID), 每行一个, 追加到 --trusted-host.
+    # 配置在 ${DSH_HOME}/trusted_hosts.conf, 与 proxy.conf 机制一致; # 开头为注释.
+    # 自动清理: 去掉 http(s):// 前缀与结尾 /, 否则非法条目会让整个 trustedHosts 加载失败 → 全 403.
     if [ -f "${DSH_HOME}/trusted_hosts.conf" ]; then
-        HOST_TRUSTED="$(head -1 "${DSH_HOME}/trusted_hosts.conf" | tr -d '[:space:]')"
-        [ -n "${HOST_TRUSTED}" ] && TRUSTED_HOST_ARGS="${TRUSTED_HOST_ARGS} --trusted-host ${HOST_TRUSTED}"
+        while IFS= read -r raw_host; do
+            host="$(printf '%s' "${raw_host}" | sed -e 's#^https\?://##' -e 's#/$##' -e 's/[[:space:]]//g')"
+            [ -z "${host}" ] && continue
+            case "${host}" in \#*) continue;; esac
+            TRUSTED_HOST_ARGS="${TRUSTED_HOST_ARGS} --trusted-host ${host}"
+        done < "${DSH_HOME}/trusted_hosts.conf"
     fi
     # 兜底: 若未探测到, 至少信任回环
     [ -z "${TRUSTED_HOST_ARGS}" ] && TRUSTED_HOST_ARGS="--trusted-host 127.0.0.1"
+    # 放宽 dsh 特权 API (/api/settings.* 等) 的回环钉扎:
+    # 上游对 PRIVILEGED_METHODS 硬编码只信回环, 局域网直连 API 全 403.
+    # 幂等 patch dsh-client-connection, 让特权 API 也用 --trusted-host 列表.
+    if [ -n "${DSH_JS}" ]; then
+        CC_LIB="$(dirname "$(dirname "${DSH_JS}")")/dsh-client-connection/lib/index.js"
+        [ -f "${CC_LIB}" ] && /usr/bin/python3 - "${CC_LIB}" <<'PATCHPY'
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+changed = False
+old1 = 'PRIVILEGED_METHODS.has(method) && !isTrustedApiRequest(request, []))'
+new1 = 'PRIVILEGED_METHODS.has(method) && !isTrustedApiRequest(request, trustedHosts))'
+if old1 in s and new1 not in s:
+    s = s.replace(old1, new1); changed = True
+old2 = 'if (interceptor.options.authority == "loopback" && !isTrustedApiRequest(request, []))'
+old2b = 'if (interceptor.options.authority === "loopback" && !isTrustedApiRequest(request, []))'
+new2 = 'if (interceptor.options.authority === "loopback" && !isTrustedApiRequest(request, this.trustedHosts))'
+if old2b in s and new2 not in s:
+    s = s.replace(old2b, new2); changed = True
+elif old2 in s and new2 not in s:
+    s = s.replace(old2, new2); changed = True
+old3 = 'const trustedHosts = options.authority === "loopback" ? [] : this.trustedHosts;'
+new3 = 'const trustedHosts = this.trustedHosts;'
+if old3 in s and new3 not in s:
+    s = s.replace(old3, new3); changed = True
+if changed:
+    open(p, "w", encoding="utf-8").write(s)
+    print("privileged-fence patched")
+else:
+    print("privileged-fence already patched")
+PATCHPY
+    fi
     # 启动 dsh web: 不带 --host (让 patch 的 0.0.0.0 生效), 显式传 --port + trusted-host
     # DSH_ARGS 非空时 = 用 node <bin.js> 运行 (无 bin 链接的兜底)
     # dsh 自托管 node: 把 nodejs_v24 bin 目录加入 PATH, 供 dsh 进程及 agent 调用 node/npm
