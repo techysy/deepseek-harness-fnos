@@ -129,14 +129,17 @@ PATCHEOF
     # 构建 /api browser-trust fence 的 trusted-host 列表:
     # dsh 只信任回环地址或 --trusted-host 声明的 authority, 否则局域网访问 API 全 403.
     # 把本机所有非回环 IPv4 (局域网/Tailscale 等) 都加入信任, 允许从这些地址直连访问 API.
-    TRUSTED_HOST_ARGS=""
-    LAN_IPS="$(ip -4 addr show 2>/dev/null | grep -oE 'inet [0-9.]+' | awk '{print $2}' | grep -v '^127\.' || true)"
+    # 注意: dsh 的 --trusted-host <authority...> 是 variadic (一个 flag 带多个值),
+    # 重复的 --trusted-host flag 会被 commander 后者覆盖, 只保留最后一个. 所以必须用单个
+    # --trusted-host 拼所有值 (空格分隔).
+    TRUSTED_HOST_VALUES=""
+    LAN_IPS="$(ip -4 addr show 2>/dev/null | grep -oE 'inet [0-9.]+' | awk '{print $2}' | grep -v '^127\\.' || true)"
     for ip in ${LAN_IPS}; do
-        TRUSTED_HOST_ARGS="${TRUSTED_HOST_ARGS} --trusted-host ${ip}"
+        TRUSTED_HOST_VALUES="${TRUSTED_HOST_VALUES} ${ip}"
     done
     # 内置默认 trusted-host: fnos.net (FN Connect 域名) + 本机非回环 IP.
-    TRUSTED_HOST_ARGS="${TRUSTED_HOST_ARGS} --trusted-host fnos.net"
-    # 读取用户配置的 FN Connect 域名 (FN ID), 每行一个, 追加到 --trusted-host.
+    TRUSTED_HOST_VALUES="${TRUSTED_HOST_VALUES} fnos.net"
+    # 读取用户配置的 FN Connect 域名 (FN ID), 每行一个, 追加.
     # 配置在 ${DSH_HOME}/trusted_hosts.conf, 与 proxy.conf 机制一致; # 开头为注释.
     # 自动清理: 去掉 http(s):// 前缀与结尾 /, 否则非法条目会让整个 trustedHosts 加载失败 → 全 403.
     if [ -f "${DSH_HOME}/trusted_hosts.conf" ]; then
@@ -144,11 +147,13 @@ PATCHEOF
             host="$(printf '%s' "${raw_host}" | sed -e 's#^https\?://##' -e 's#/$##' -e 's/[[:space:]]//g')"
             [ -z "${host}" ] && continue
             case "${host}" in \#*) continue;; esac
-            TRUSTED_HOST_ARGS="${TRUSTED_HOST_ARGS} --trusted-host ${host}"
+            TRUSTED_HOST_VALUES="${TRUSTED_HOST_VALUES} ${host}"
         done < "${DSH_HOME}/trusted_hosts.conf"
     fi
+    TRUSTED_HOST_VALUES="$(printf '%s' "${TRUSTED_HOST_VALUES}" | tr -s ' ' | sed 's/^ *//;s/ *$//')"
     # 兜底: 若未探测到, 至少信任回环
-    [ -z "${TRUSTED_HOST_ARGS}" ] && TRUSTED_HOST_ARGS="--trusted-host 127.0.0.1"
+    [ -z "${TRUSTED_HOST_VALUES}" ] && TRUSTED_HOST_VALUES="127.0.0.1"
+    TRUSTED_HOST_ARGS="--trusted-host ${TRUSTED_HOST_VALUES}"
     # 放宽 dsh 特权 API (/api/settings.* 等) 的回环钉扎:
     # 上游对 PRIVILEGED_METHODS 硬编码只信回环, 局域网直连 API 全 403.
     # 幂等 patch dsh-client-connection, 让特权 API 也用 --trusted-host 列表.
