@@ -64,4 +64,5 @@ node -v && npm -v && pnpm --version && yarn --version && bun --version
 
 - [同步上游后检查清单](docs/upstream-sync-checklist.md) — 每次同步上游/重装后验证本地补丁（crypto polyfill、特权 API 403、trusted-host、命令可用性）是否还在
 - [ARM 离线打包](docs/arm-build.md)
-- [dsh Node.js 自托管](docs/dsh-nodejs.md)
+- [dsh Node.js 自托管](docs/dsh-nodejs.md) — node/npm 基础接入
+- [dsh Agent 命令兼容矩阵](docs/dsh-nodejs-commands.md) — **最新** node/npm/npx/pnpm/yarn/bun/corepack 完整命令 + 数据区配置
