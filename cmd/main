@@ -157,9 +157,17 @@ PATCHEOF
     # 放宽 dsh 特权 API (/api/settings.* 等) 的回环钉扎:
     # 上游对 PRIVILEGED_METHODS 硬编码只信回环, 局域网直连 API 全 403.
     # 幂等 patch dsh-client-connection, 让特权 API 也用 --trusted-host 列表.
-    if [ -n "${DSH_JS}" ]; then
-        CC_LIB="$(dirname "$(dirname "${DSH_JS}")")/dsh-client-connection/lib/index.js"
-        [ -f "${CC_LIB}" ] && /usr/bin/python3 - "${CC_LIB}" <<'PATCHPY'
+    # 多路径定位 CC_LIB (DSH_JS 可能因软链/部署差异为空, 直接探测 node_modules 位置)
+    CC_LIB=""
+    for cand in \
+        "$(dirname "$(dirname "${DSH_JS}")")/dsh-client-connection/lib/index.js" \
+        "${APP_DIR}/server/node_modules/@deepseek-ai/dsh-client-connection/lib/index.js" \
+        "${APP_VOL}/@appcenter/dsh/server/node_modules/@deepseek-ai/dsh-client-connection/lib/index.js" \
+        "/vol4/@appcenter/dsh/server/node_modules/@deepseek-ai/dsh-client-connection/lib/index.js"; do
+        [ -f "$cand" ] && CC_LIB="$cand" && break
+    done
+    if [ -n "${CC_LIB}" ]; then
+        /usr/bin/python3 - "${CC_LIB}" <<'PATCHPY'
 import sys
 p = sys.argv[1]
 s = open(p, encoding="utf-8").read()
