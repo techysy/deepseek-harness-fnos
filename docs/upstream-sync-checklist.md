@@ -55,11 +55,19 @@ curl -s -o /dev/null -w '%{http_code}\n' \
   -H 'sec-fetch-site: same-origin' -H 'Content-Type: application/json' -d '{}' \
   -X POST http://127.0.0.1:28000/api/settings.describe       # 期望 200（不是 403）
 
-# 3c. trusted-host 列表含 LAN IP + fnos.net
-ps aux | grep 'dsh.*web' | grep -v grep | grep -o 'trusted-host [^ ]*' | sort -u
-# 期望包含: <LAN IP>, fnos.net, 172.17.0.1 等
+# 3c. trusted-host 列表含 LAN IP + fnos.net (注意: 现在用单个 --trusted-host flag 拼所有值,
+#     因为 dsh 的 --trusted-host <authority...> 是 variadic, 重复 flag 只保留最后一个)
+ps aux | grep 'dsh.*web' | grep -v grep | grep -oE 'trusted-host .*' | head -1
+# 期望单条 trusted-host 后跟所有值: <LAN IP> ... fnos.net ... dsh.<FNID>.fnos.net
 
-# 3d. 浏览器实测: 打开 http://<NAS_IP>:28000, 设置页能加载模型/插件配置 (不白屏)
+# 3d. WebSocket 握手验证 (公网/FN ID 域访问不再 403)
+#     期望 101 (不是 403): dsh.<FNID>.fnos.net
+curl -s -o /dev/null -w '%{http_code}\n' -m 5 \
+  -H 'Host: dsh.<FNID>.fnos.net' -H 'Connection: Upgrade' -H 'Upgrade: websocket' \
+  -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: x3JJHMbDL1EzLkh9GBhXDw==' \
+  http://127.0.0.1:28000/api/events.mux
+
+# 3e. 浏览器实测: 打开 http://<NAS_IP>:28000, 设置页能加载模型/插件配置 (不白屏)
 ```
 
 ### 4. 版本号对齐
