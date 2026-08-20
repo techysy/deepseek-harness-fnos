@@ -1,11 +1,14 @@
-## 0.1.0-rc.7 (2026-08-19)
-- **版本号对齐上游**：bump 到 `@deepseek-ai/dsh@0.1.0-rc.7`（npm latest/next），重新构建离线 x86 node_modules（NAS glibc 2.36 环境编译）
-- **Agent 环境集成 pnpm**：corepack shims 加入 PATH，dsh 内 bash 可直接 `pnpm` 跑项目（COREPACK_HOME 指向数据区持久缓存）
-- **修复特权 API 403**：放宽 `/api/settings.*` 回环钉扎，局域网直连不再 `HTTP 403`
-- **crypto.randomUUID polyfill**：注入 index.html（fnOS iframe 非安全上下文兼容）
-- **默认 trusted-host 加 fnos.net** + trusted_hosts.conf 自动清理非法格式
-- 交付 `dsh-0.1.0-rc.7-{all,iframe-all,x86,iframe-x86}.fpk`
 # CHANGELOG
+
+## 0.1.0-rc.7 (2026-08-20)
+
+> 本日小版本更新：trusted-host 修复 + 自定义域名（DDNS）支持。
+
+### 修复 / 新增
+- **FN ID 字段名修正**：安装向导 / 设置页统一用 FN ID（`wizard_fnos_id` / `fnos_id`，只填 ID 如 `techysy`），回调自动拼 `<id>.fnos.net`、`dsh.<id>.fnos.net`、`fnos.net` 三个信任域写入 `trusted_hosts.conf`。修复先前字段名不一致导致向导填的域名未写入的问题。
+- **新增自定义域名（DDNS）字段**：部分用户用自己的域名做 DDNS 远程访问（非 FN Connect），新增 `wizard_custom_domain` / `custom_domain` 字段，完整域名追加到 `trusted_hosts.conf`，dsh 启动时一并加入 `--trusted-host`，域名访问 API 不再 403。
+- **cmd/main trusted-host 完善**：支持 `trusted_hosts.conf` 多行读取（每行一个 hostname，`#` 注释，自动清理 `http(s)://` 前缀与结尾 `/`），内置 `fnos.net` + 本机非回环 IP，避免非法条目导致整个 trustedHosts 加载失败。
+- **variadic trusted-host**：改用单个 `--trusted-host` flag 拼所有值（空格分隔），避免 commander 后者覆盖只保留最后一个。
 
 ## 0.1.0-rc.7 (2026-08-14)
 
