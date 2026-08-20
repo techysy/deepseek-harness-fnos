@@ -1,35 +1,43 @@
 [
-    {
-        "stepTitle": "网络代理与 FN Connect 配置",
-        "items": [
-            {
-                "type": "text",
-                "field": "proxy_ip",
-                "label": "代理 IP",
-                "placeholder": "127.0.0.1",
-                "initValue": "",
-                "desc": "HTTP 代理 IP（如 127.0.0.1）。留空保留当前设置。"
-            },
-            {
-                "type": "text",
-                "field": "proxy_port",
-                "label": "代理端口",
-                "placeholder": "7890",
-                "initValue": "",
-                "desc": "代理端口（纯数字）。留空保留当前设置。"
-            },
-            {
-                "type": "text",
-                "field": "fnos_id",
-                "label": "FN Connect ID",
-                "placeholder": "techysy",
-                "initValue": "",
-                "desc": "只填 ID（如 techysy），自动匹配 https://ID.fnos.net 与 https://fnos.net/ID 信任域，远程访问不 403。留空保留当前设置。"
-            },
-            {
-                "type": "tips",
-                "helpText": "代理写入 proxy.conf、FN ID 写入 trusted_hosts.conf。留空保留当前设置，修改后重启应用生效。"
-            }
-        ]
-    }
+  {
+    "stepTitle": "网络代理与 FN Connect 配置",
+    "items": [
+      {
+        "type": "text",
+        "field": "proxy_ip",
+        "label": "代理 IP",
+        "placeholder": "127.0.0.1",
+        "initValue": "",
+        "desc": "HTTP 代理 IP（如 127.0.0.1）。留空保留当前设置。"
+      },
+      {
+        "type": "text",
+        "field": "proxy_port",
+        "label": "代理端口",
+        "placeholder": "7890",
+        "initValue": "",
+        "desc": "代理端口（纯数字）。留空保留当前设置。"
+      },
+      {
+        "type": "text",
+        "field": "fnos_id",
+        "label": "FN Connect ID",
+        "placeholder": "techysy",
+        "initValue": "",
+        "desc": "只填 ID（如 techysy），自动匹配 https://ID.fnos.net 与 https://fnos.net/ID 信任域，远程访问不 403。留空保留当前设置。"
+      },
+      {
+        "type": "text",
+        "field": "custom_domain",
+        "label": "自定义域名（DDNS）",
+        "initValue": "",
+        "placeholder": "dsh.yourdomain.com",
+        "desc": "若用自定义域名做 DDNS 远程访问（非 FN Connect），填完整域名（如 dsh.myhome.com）。加入 dsh 信任列表。留空保留当前设置。"
+      },
+      {
+        "type": "tips",
+        "helpText": "代理写入 proxy.conf、FN ID 写入 trusted_hosts.conf。留空保留当前设置，修改后重启应用生效。"
+      }
+    ]
+  }
 ]

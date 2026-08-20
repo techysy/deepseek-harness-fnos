@@ -64,5 +64,17 @@ else
     echo "[$(date '+%F %T')] fnos_id empty; keep current trusted_hosts.conf" >> "${LOG}"
 fi
 
+# 保存自定义域名 (DDNS) 到 trusted_hosts.conf (追加, 不覆盖 FN ID 生成)
+if [ -n "${custom_domain:-}" ]; then
+    CUSTOM_DOMAIN="$(printf '%s' "${custom_domain}" | tr -d '[:space:]' | sed -e 's#^https\?://##' -e 's#/$##')"
+    if [ -n "${CUSTOM_DOMAIN}" ]; then
+        touch "${DSH_HOME}/trusted_hosts.conf" 2>/dev/null
+        printf '%s\n' "${CUSTOM_DOMAIN}" >> "${DSH_HOME}/trusted_hosts.conf" 2>/dev/null
+        chmod 600 "${DSH_HOME}/trusted_hosts.conf" 2>/dev/null
+        chown "${APP_NAME:-dsh}:${APP_NAME:-dsh}" "${DSH_HOME}/trusted_hosts.conf" 2>/dev/null || true
+        echo "[$(date '+%F %T')] saved custom domain to trusted_hosts.conf: ${CUSTOM_DOMAIN}" >> "${LOG}"
+    fi
+fi
+
 echo "[$(date '+%F %T')] config_callback done" >> "${LOG}"
 exit 0

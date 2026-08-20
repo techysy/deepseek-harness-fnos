@@ -79,6 +79,18 @@ else
     echo "[$(date '+%F %T')] wizard_fnos_id empty; keep current trusted_hosts.conf" >> "${LOG}"
 fi
 
+# 保存安装向导填的自定义域名 (DDNS) 到 trusted_hosts.conf (追加, 不覆盖 FN ID 生成)
+if [ -n "${wizard_custom_domain:-}" ]; then
+    CUSTOM_DOMAIN="$(printf '%s' "${wizard_custom_domain}" | tr -d '[:space:]' | sed -e 's#^https\?://##' -e 's#/$##')"
+    if [ -n "${CUSTOM_DOMAIN}" ]; then
+        touch "${DSH_HOME}/trusted_hosts.conf" 2>/dev/null
+        printf '%s\n' "${CUSTOM_DOMAIN}" >> "${DSH_HOME}/trusted_hosts.conf" 2>/dev/null
+        chmod 600 "${DSH_HOME}/trusted_hosts.conf" 2>/dev/null
+        chown "${APP_NAME:-dsh}:${APP_NAME:-dsh}" "${DSH_HOME}/trusted_hosts.conf" 2>/dev/null || true
+        echo "[$(date '+%F %T')] saved wizard custom domain to trusted_hosts.conf: ${CUSTOM_DOMAIN}" >> "${LOG}"
+    fi
+fi
+
 # 检查离线 dsh 包是否存在 (随 fpk 打包); 若无则在线安装 (针对当前架构编译原生模块)
 if [ ! -f "${DSH_OFFLINE}" ]; then
     echo "[$(date '+%F %T')] WARN: offline dsh package not found; online npm install (针对当前架构编译)..." >> "${LOG}"

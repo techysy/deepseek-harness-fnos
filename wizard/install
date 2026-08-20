@@ -35,6 +35,14 @@
         "tip": "只填 ID（如 techysy），自动匹配 https://ID.fnos.net 与 https://fnos.net/ID 信任域，远程访问不 403。留空仅局域网可访问。"
       },
       {
+        "type": "text",
+        "field": "wizard_custom_domain",
+        "label": "自定义域名（可选）",
+        "initValue": "",
+        "placeholder": "dsh.yourdomain.com",
+        "tip": "若用自定义域名做 DDNS 远程访问（非 FN Connect），填完整域名（如 dsh.myhome.com，不带 https://）。加入 dsh 信任列表，域名访问 API 不再 403。留空则仅局域网/FN Connect 可访问。"
+      },
+      {
         "type": "tips",
         "helpText": "安装后通过桌面图标或 http://<NAS_IP>:28000 访问。代理与 FN ID 留空则分别走默认/仅局域网。"
       }
