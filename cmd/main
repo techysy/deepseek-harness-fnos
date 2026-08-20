@@ -242,7 +242,7 @@ PATCHPY
     DSH_HOME="${DSH_HOME}" nohup "${DSH_BIN}" ${DSH_ARGS:-} web --port "${DSH_PORT}" ${TRUSTED_HOST_ARGS} \
         >> "${DSH_LOG}" 2>&1 &
     echo $! > "${DSH_PID}"
-    log "dsh web started (pid $(cat "${DSH_PID}")) :0.0.0.0:${DSH_PORT} (patch: host 0.0.0.0) trusted-host:${LAN_IPS}"
+    log "dsh web started (pid $(cat "${DSH_PID}")) :0.0.0.0:${DSH_PORT} (patch: host 0.0.0.0) trusted-host:${TRUSTED_HOST_VALUES}"
     sleep 3
 }
 
