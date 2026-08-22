@@ -17,7 +17,7 @@
 #   2. 解压 ARM64 node_modules 到 app/server/node_modules
 #   3. manifest: platform = arm
 #   4. fnpack build → dsh-<ver>-arm.fpk
-#   5. 按交付规范复制到 /vol1/1000/fnOS App/fpk/deepseek-harness/
+#   5. 按交付规范复制到 /vol1/1000/fnOS App/fpk/dsh/
 # =============================================================================
 set -euo pipefail
 
@@ -31,12 +31,11 @@ REPO_URL="https://github.com/techysy/deepseek-harness-fnos.git"
 BUILD_ROOT="${HOME}/build"
 SRC_DIR="${BUILD_ROOT}/deepseek-harness-fnos"
 # 交付目录 (fnOS 应用中心手动安装扫描此目录)
-# 注意: 101 上 dsh 的交付子目录名是 "deepseek-harness" (非 "dsh")
-DELIVERY_NEW="/vol1/1000/fnOS App/fpk/deepseek-harness"
-DELIVERY_OLD="/vol1/1000/fnOS App/old_fpk/deepseek-harness"
+DELIVERY_NEW="/vol1/1000/fnOS App/fpk/dsh"
+DELIVERY_OLD="/vol1/1000/fnOS App/old_fpk/dsh"
 # 数据卷路径按实际调整: 若 /vol1 不在, 回退到 /vol4
-[ -d "/vol1" ] || DELIVERY_NEW="/vol4/1000/fnOS App/fpk/deepseek-harness"
-[ -d "/vol1" ] || DELIVERY_OLD="/vol4/1000/fnOS App/old_fpk/deepseek-harness"
+[ -d "/vol1" ] || DELIVERY_NEW="/vol4/1000/fnOS App/fpk/dsh"
+[ -d "/vol1" ] || DELIVERY_OLD="/vol4/1000/fnOS App/old_fpk/dsh"
 
 command -v fnpack >/dev/null 2>&1 || { echo "错误: 未找到 fnpack (飞牛打包工具)" >&2; exit 1; }
 
