@@ -2,7 +2,7 @@
 
 [![GitHub release](https://img.shields.io/github/v/release/techysy/deepseek-harness-fnos?label=Latest&color=blue)](https://github.com/techysy/deepseek-harness-fnos/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://github.com/techysy/deepseek-harness-fnos/blob/main/LICENSE)
-[![dsh](https://img.shields.io/badge/dsh-0.1.0--rc.7-blueviolet.svg)](https://github.com/deepseek-ai/deepseek-harness)
+[![dsh](https://img.shields.io/badge/dsh-0.1.1--rc.2-blueviolet.svg)](https://github.com/deepseek-ai/deepseek-harness)
 [![fnOS](https://img.shields.io/badge/fnOS-1.1.31xx+-orange.svg)](https://developer.fnnas.com/docs/guide)
 [![Node.js](https://img.shields.io/badge/Node.js-v24-green.svg)]()
 [![bun](https://img.shields.io/badge/bun-v1.3.9-black.svg)]()

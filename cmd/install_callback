@@ -27,7 +27,12 @@ fi
 LOG="${DATA_DIR}/install.log"
 DSH_HOME="${DATA_DIR}/dsh_home"
 # 离线 dsh 包 (随 fpk 打包, 安装后解压在 ${TRIM_APPDEST}/server)
-DSH_OFFLINE="${APP_DIR}/server/node_modules/@deepseek-ai/dsh/lib/bin.js"
+DSH_OFFLINE=""
+for cand in "${APP_DIR}/target/server/node_modules/@deepseek-ai/dsh/lib/bin.js" \
+            "${APP_DIR}/server/node_modules/@deepseek-ai/dsh/lib/bin.js" \
+            "${APP_DIR}/node_modules/@deepseek-ai/dsh/lib/bin.js"; do
+    [ -f "$cand" ] && DSH_OFFLINE="$cand" && break
+done
 
 mkdir -p "${DATA_DIR}" "${DSH_HOME}"
 echo "[$(date '+%F %T')] install_callback start (user=$(id -un) uid=$(id -u))" >> "${LOG}"
