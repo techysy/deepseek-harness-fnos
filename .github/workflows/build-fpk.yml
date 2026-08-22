@@ -1,0 +1,159 @@
+name: Build dsh fpk (在线打包)
+
+on:
+  workflow_dispatch:
+    inputs:
+      arch:
+        description: '目标架构 (arm / x86)'
+        required: false
+        default: 'arm'
+        type: choice
+        options:
+          - arm
+          - x86
+      dsh_version:
+        description: '要安装的 @deepseek-ai/dsh 版本 (例如 ^0.1.1-rc.2; 留空用 package.json 声明)'
+        required: false
+        default: ''
+      glibc_compat:
+        description: 'ARM 版是否用 manylinux_2_28 容器保证旧 glibc 兼容 (仅 arm 生效)'
+        required: false
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+concurrency:
+  group: build-dsh-fpk-${{ github.ref }}-${{ inputs.arch }}
+  cancel-in-progress: true
+
+jobs:
+  build-fpk:
+    runs-on: ${{ inputs.arch == 'arm' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    timeout-minutes: 120
+    steps:
+      - name: Checkout deepseek-harness-fnos
+        uses: actions/checkout@v4
+
+      - name: Show runner environment
+        run: |
+          uname -m
+          ldd --version | head -1
+          node --version 2>/dev/null || echo "node not on runner (build in container)"
+          docker --version
+
+      - name: (可选) 覆盖 @deepseek-ai/dsh 版本
+        if: inputs.dsh_version != ''
+        run: |
+          cd app/server
+          npm pkg set "dependencies.@deepseek-ai/dsh=${{ inputs.dsh_version }}"
+
+      # ── 构建 node_modules ─────────────────────────────────────────────
+      - name: 构建 ARM64 node_modules (manylinux_2_28 容器, glibc 兼容)
+        if: inputs.arch == 'arm' && inputs.glibc_compat == 'true'
+        run: bash scripts/build-arm-node-modules.sh app/server
+
+      - name: 构建 ARM64 node_modules (runner 原生)
+        if: inputs.arch == 'arm' && inputs.glibc_compat != 'true'
+        run: |
+          cd app/server
+          npm install --no-audit --no-fund
+          # 校验产物
+          find node_modules -name "*.node" -type f | head -3 | xargs -I{} file {} 2>/dev/null || true
+
+      - name: 构建 x86_64 node_modules
+        if: inputs.arch == 'x86'
+        run: |
+          cd app/server
+          npm install --no-audit --no-fund
+          find node_modules -name "*.node" -type f | head -3 | xargs -I{} file {} 2>/dev/null || true
+
+      # ── 校验 node_modules 里 dsh 二进制存在 ────────────────────────────
+      - name: 校验 @deepseek-ai/dsh 就位
+        run: |
+          cd app/server
+          ls -la node_modules/@deepseek-ai/dsh/lib/bin.js 2>&1 || echo "WARN: bin.js not found"
+
+      # ── 下载 fnpack ───────────────────────────────────────────────────
+      - name: 下载 fnpack (飞牛官方打包工具)
+        env:
+          FNPACK_VERSION: "1.2.1"
+        run: |
+          if [ "${{ inputs.arch }}" = "arm" ]; then
+            FNPACK_BIN="fnpack-${FNPACK_VERSION}-linux-arm64"
+          else
+            FNPACK_BIN="fnpack-${FNPACK_VERSION}-linux-amd64"
+          fi
+          curl -fsSL -o /usr/local/bin/fnpack "https://static2.fnnas.com/fnpack/${FNPACK_BIN}"
+          chmod +x /usr/local/bin/fnpack
+          # 支持环境变量覆盖 (用户可传自建 fnpack URL)
+          if [ -n "${{ secrets.FNPACK_URL }}" ]; then
+            curl -fsSL -o /usr/local/bin/fnpack "${{ secrets.FNPACK_URL }}"
+            chmod +x /usr/local/bin/fnpack
+          fi
+          fnpack --help | head -3
+
+      # ── 打包 fpk (url + iframe 两个变体) ───────────────────────────────
+      - name: 移除 symlink (fnpack 不支持 symlink)
+        run: |
+          # node_modules/.bin 下的 symlink 会让 fnpack build 失败，打包前移除
+          find . -type l -not -path './.git/*' -delete 2>/dev/null || true
+          echo "symlink 已移除，剩余: $(find . -type l -not -path './.git/*' | wc -l)"
+
+      - name: 设置 manifest platform
+        run: |
+          if grep -qE '^platform[[:space:]]*=' manifest; then
+            sed -i "s/^platform[[:space:]]*=.*/platform               = ${{ inputs.arch }}/" manifest
+          else
+            echo "platform               = ${{ inputs.arch }}" >> manifest
+          fi
+          grep -E '^(platform|appname|version)[[:space:]]*=' manifest
+
+      - name: 打包 url 版 fpk
+        run: |
+          node -e "
+            const fs=require('fs');
+            const c=fs.readFileSync('app/ui/config','utf8');
+            fs.writeFileSync('app/ui/config', c.replace(/\"type\"\s*:\s*\"[a-z]*\"/, '\"type\": \"url\"'));
+          "
+          rm -f dsh.fpk
+          fnpack build -d .
+          [ -f dsh.fpk ] || { echo "ERROR: fnpack build failed"; exit 1; }
+          VERSION="$(grep -E '^version[[:space:]]*=' manifest | head -1 | sed 's/.*=//;s/[[:space:]]//g')"
+          mv dsh.fpk "dsh-${VERSION}-${{ inputs.arch }}.fpk"
+          ls -lh "dsh-${VERSION}-${{ inputs.arch }}.fpk"
+          echo "FPK_URL=$PWD/dsh-${VERSION}-${{ inputs.arch }}.fpk" >> "$GITHUB_ENV"
+
+      - name: 打包 iframe 版 fpk
+        run: |
+          node -e "
+            const fs=require('fs');
+            const c=fs.readFileSync('app/ui/config','utf8');
+            fs.writeFileSync('app/ui/config', c.replace(/\"type\"\s*:\s*\"[a-z]*\"/, '\"type\": \"iframe\"'));
+          "
+          rm -f dsh.fpk
+          fnpack build -d .
+          [ -f dsh.fpk ] || { echo "ERROR: fnpack build iframe failed"; exit 1; }
+          VERSION="$(grep -E '^version[[:space:]]*=' manifest | head -1 | sed 's/.*=//;s/[[:space:]]//g')"
+          mv dsh.fpk "dsh-${VERSION}-iframe-${{ inputs.arch }}.fpk"
+          ls -lh "dsh-${VERSION}-iframe-${{ inputs.arch }}.fpk"
+          echo "FPK_IFRAME=$PWD/dsh-${VERSION}-iframe-${{ inputs.arch }}.fpk" >> "$GITHUB_ENV"
+
+      # ── 上传产物 ──────────────────────────────────────────────────────
+      - name: Upload fpk artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dsh-fpk-${{ inputs.arch }}-${{ github.sha }}
+          path: |
+            dsh-*-${{ inputs.arch }}.fpk
+            dsh-*-iframe-${{ inputs.arch }}.fpk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Summary
+        run: |
+          echo "## ✅ dsh fpk 打包完成 (${{ inputs.arch }})" >> "$GITHUB_STEP_SUMMARY"
+          echo "- URL 版: \`$FPK_URL\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- IFRAME 版: \`$FPK_IFRAME\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- 下载 artifacts 或查看本步 Summary" >> "$GITHUB_STEP_SUMMARY"
