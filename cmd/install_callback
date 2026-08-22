@@ -142,5 +142,39 @@ else
 fi
 
 echo "[$(date '+%F %T')] install_callback done" >> "${LOG}"
+
+# === data migration: restore from old app paths if dsh_home is empty ===
+if [ ! -f "${DSH_HOME}/.env" ] || [ ! -d "${DSH_HOME}/profiles" ]; then
+    OLD_PATHS="/vol4/@appdata/dsh/dsh_home /vol4/@appdata/deepseek-harness/dsh_home"
+    for old in $OLD_PATHS; do
+        if [ -d "${old}/profiles" ] && [ -f "${old}/.env" ]; then
+            echo "[$(date '+%F %T')] migrating data from ${old} to ${DSH_HOME}" >> "${LOG}"
+            cp -a "${old}"/* "${DSH_HOME}/" 2>/dev/null || true
+            cp -a "${old}"/.* "${DSH_HOME}/" 2>/dev/null || true
+            chown -R deepseek-harness:deepseek-harness "${DSH_HOME}" 2>/dev/null || true
+            break
+        fi
+    done
+fi
+
 init_dsh_home
+
+# === workspace symlink creation (dsh monorepo) ===
+SERVER_DIR="${APP_DIR}/target/server"
+if [ -d "${SERVER_DIR}/packages" ] && [ -d "${SERVER_DIR}/node_modules" ]; then
+    NM="${SERVER_DIR}/node_modules/@deepseek-ai"
+    mkdir -p "${NM}"
+    for f in "${SERVER_DIR}"/vendor/*/package.json "${SERVER_DIR}"/packages/*/*/package.json "${SERVER_DIR}"/apps/*/package.json; do
+        [ -f "${f}" ] || continue
+        name=$(grep -o '"name": *"@deepseek-ai/[^"]*"' "${f}" 2>/dev/null | head -1 | sed 's/"name": *"@deepseek-ai\///;s/"//')
+        [ -z "${name}" ] && continue
+        dir=$(dirname "${f}")
+        target="${NM}/${name}"
+        if [ ! -e "${target}" ]; then
+            ln -s "../../${dir}" "${target}" 2>/dev/null
+        fi
+    done
+    echo "[$(date '+%F %T')] workspace symlinks created: $(ls "${NM}" 2>/dev/null | wc -l)" >> "${LOG}"
+fi
+
 exit 0

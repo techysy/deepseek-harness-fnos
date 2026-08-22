@@ -25,7 +25,12 @@ else
 fi
 # APP_VOL 由 APP_DIR 提取 (同卷), 不写死 /vol4
 LOG="${DATA_DIR}/install.log"
-DSH_OFFLINE="${APP_DIR}/server/node_modules/@deepseek-ai/dsh/lib/bin.js"
+DSH_OFFLINE=""
+for cand in "${APP_DIR}/target/server/node_modules/@deepseek-ai/dsh/lib/bin.js" \
+            "${APP_DIR}/server/node_modules/@deepseek-ai/dsh/lib/bin.js" \
+            "${APP_DIR}/node_modules/@deepseek-ai/dsh/lib/bin.js"; do
+    [ -f "$cand" ] && DSH_OFFLINE="$cand" && break
+done
 
 echo "[$(date '+%F %T')] upgrade_callback start" >> "${LOG}"
 
@@ -62,6 +67,25 @@ if [ -f "${PATCH_SCRIPT}" ]; then
     echo "[$(date '+%F %T')] settings patch applied (exit=$?)" >> "${LOG}"
 else
     echo "[$(date '+%F %T')] WARN: patch script not found at ${PATCH_SCRIPT}" >> "${LOG}"
+fi
+
+
+# === workspace symlink creation (dsh monorepo) ===
+SERVER_DIR="${APP_DIR}/target/server"
+if [ -d "${SERVER_DIR}/packages" ] && [ -d "${SERVER_DIR}/node_modules" ]; then
+    NM="${SERVER_DIR}/node_modules/@deepseek-ai"
+    mkdir -p "${NM}"
+    for f in "${SERVER_DIR}"/vendor/*/package.json "${SERVER_DIR}"/packages/*/*/package.json "${SERVER_DIR}"/apps/*/package.json; do
+        [ -f "${f}" ] || continue
+        name=$(grep -o '"name": *"@deepseek-ai/[^"]*"' "${f}" 2>/dev/null | head -1 | sed 's/"name": *"@deepseek-ai\///;s/"//')
+        [ -z "${name}" ] && continue
+        dir=$(dirname "${f}")
+        target="${NM}/${name}"
+        if [ ! -e "${target}" ]; then
+            ln -s "../../${dir}" "${target}" 2>/dev/null
+        fi
+    done
+    echo "[$(date '+%F %T')] workspace symlinks created: $(ls "${NM}" 2>/dev/null | wc -l)" >> "${LOG}"
 fi
 
 exit 0

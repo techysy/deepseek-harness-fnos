@@ -1,5 +1,25 @@
 # CHANGELOG
 
+## 0.1.1-rc.2 (2026-08-22)
+
+> 升级上游 `@deepseek-ai/dsh` 到 0.1.1-rc.2。本地 3 处源码补丁 + polyfill 注入，pnpm monorepo 离线打包。
+
+### 升级 / 新增
+- **上游升级**：deepseek-ai/deepseek-harness 0.1.0-rc.7 → 0.1.1-rc.2（pnpm install + pnpm build 重编译，含客户端 `pnpm run build:lib:client`）
+- **`--host 0.0.0.0` 补丁**：`packages/bundle/web-app/src/startup.ts` 放开 CLI 层拦截，允许全接口绑定（上游仍拒绝 0.0.0.0）
+- **PRIVILEGED_METHODS trustedHosts 补丁**：`packages/client/connection/src/index.ts` 空信任列表改 `trustedHosts`，LAN 访问 settings API 不再 403
+- **isLoopback → host mode 补丁**：`packages/client/ui-settings/src/client/index.ts` + `settings-scope.ts` 两处，设置页非 loopback 也读服务器配置
+- **crypto.randomUUID polyfill**：注入所有 `@deepseek-ai/*/lib/client.js`（LAN IP 非安全上下文修复）
+
+### 打包流程修复
+- **fnpack 不支持 symlink**：打包前 `find . -type l | unlink` 移除，打包后恢复（详见 `docs/fnpack-symlink.md`）
+- **pnpm workspace symlink 手动创建**：pnpm 在 NAS 不自动创建，含 `vendor/*` `packages/*/*` `apps/*`（dsh CLI 在 apps/cli）
+- **node_modules 权限修复**：`chmod -R a+rX node_modules/`（pnpm 创建的 600 权限文件导致 fnpack/运行失败）
+- **cmd/main / upgrade_callback 路径修复**：DSH_JS/CC_LIB/DSH_OFFLINE 加 `target/server/` 路径
+- **install/upgrade callback 加 workspace symlink 创建**（幂等，含 apps glob）
+- **install_callback 加数据迁移**：从旧路径（`/vol4/@appdata/dsh/` 等）复制 dsh_home 用户数据
+- **appname = dsh**：FN Connect 域名自动 `dsh.<user>.fnos.net`
+
 ## 0.1.0-rc.7 (2026-08-20)
 
 > 本日小版本更新：trusted-host 修复 + 自定义域名（DDNS）支持。
