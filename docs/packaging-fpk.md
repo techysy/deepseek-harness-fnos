@@ -9,6 +9,16 @@
 
 ## 1. 产物命名与变体
 
+### 版本号策略
+
+**fpk 版本号跟随上游发行版（`@deepseek-ai/dsh`），本地修复不单独抬版**。dsh 这个项目的特殊性：
+本地对上游只有补丁覆盖（运行时 patch + 构建期注入），不 fork、不改上游发行版本号，
+所以 `manifest.version` 始终等于所打包的上游版本（如 `0.1.2-rc.1`）。
+
+- 上游升级 → fpk 版本跟着变（如 0.1.1-rc.2 → 0.1.2-rc.1）
+- 本地补丁/修复 → **不改版本号**，同一版本号重新打包覆盖，变更记入 CHANGELOG 对应上游版本的条目（条目内标注"本地补丁覆盖"）
+- README 的 **dsh 徽章**显示上游版本；「当前版本」与 fpk 文件名显示 fpk 版本（二者通常一致）
+
 每次打包产出两个变体（`<ver>` 取自 `manifest` 的 `version`）：
 
 | 文件 | 打开方式 | 用途 |
@@ -110,8 +120,9 @@ bash scripts/build-x86-offline.sh              # url + iframe 两个 fpk
 
 1. **核对上游**：npm `dist-tags`（`npm view @deepseek-ai/dsh dist-tags`）+ GitHub Releases 说明；
    alpha / 有已知回退的版本跳过，等 rc
-2. **本地改版本**：`app/server/package.json` → `npm install --package-lock-only` 重新生成 lock →
+2. **本地改版本（仅上游升级时）**：`app/server/package.json` → `npm install --package-lock-only` 重新生成 lock →
    `VERSION` / `manifest`（version+desc+changelog）/ `README.md` / `CHANGELOG.md`
+   **本地修复不改版本号**：直接改补丁/cmd 脚本 → CHANGELOG 并入当前上游版本的条目（标注"本地补丁覆盖"）→ 同版本号重新打包
 3. **补丁核对**：按 [upstream-sync-checklist.md](upstream-sync-checklist.md) 对每个补丁的目标模式做包内 grep
    （拉对应版本 tarball 验证，或装完后核）
 4. **提交推送** → 触发 Actions `build-fpk.yml`（x86；有 ARM 需求再跑 arm）

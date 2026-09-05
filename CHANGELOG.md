@@ -1,25 +1,20 @@
 # CHANGELOG
 
-## 0.1.2-rc.2 (2026-09-06)
-
-> 修复桌面打开报 `dsh web authentication required; reopen the URL printed by dsh web`。上游 dsh 版本不变（0.1.2-rc.1）。
-
-### 根因
-
-上游 0.1.2 给 dsh web 加了浏览器鉴权：每次进程启动铸一次性 launch token（打印在启动日志的 URL 里），浏览器凭 `GET /?token=…` 换 30 天 authority 绑定 cookie，之后裸开 `/` 靠 cookie 通过。fpk 桌面入口是静态 URL（裸 `/`），cookie 一旦过期/换浏览器/换访问地址（IP ↔ fnos.net ↔ Tailscale，cookie 按主机名+端口绑定）就 401，且用户无从拿到新 token。
-
-### 修复（cmd/main 运行时 patch，幂等）
-
-- **browser-auth 放行**：`dsh-client-connection` 的 `isAuthenticated()` 早返回 true。安全性由既有的 Host/Origin 信任围栏承担——该检查（403）在鉴权（401）**之前**执行，能走到鉴权的请求必然已属于 loopback / `--trusted-host` 白名单，与 rc.1 已放行特权 API 是同一信任决策。副作用：带旧 token 的书签 URL 会被 303 到干净的 `/`（不再 401）。
-- **启动 URL 落盘**：启动后台抓取日志中最新一条 `dsh web: …?token=…` 写入 `${DATA_DIR}/dsh-web-url.txt`，作为参考/应急入口（如需在围栏外访问时可手动关掉 patch 用真鉴权）。
-
-### 信任面说明
-
-此补丁等效于"浏览器免密"，访问控制完全依赖 `--trusted-host` 列表（本机非回环 IP + fnos.net + `trusted_hosts.conf` 自定义条目）。请勿把 28000 端口暴露到不受信任的网络。
-
 ## 0.1.2-rc.1 (2026-09-06)
 
 > 升级上游 `@deepseek-ai/dsh` 到 0.1.2-rc.1（npm `latest` 标签，0.1.3-alpha.1 未上 npm 且含已知性能回退，暂不跟进）。打包方式不变：x86 npm install 离线打包 + polyfill/补丁注入。同步修正 package-lock.json（此前仍锁在 0.1.0-rc.7）。
+>
+> 本地修复以补丁覆盖上游发行版，**fpk 版本号跟随上游、不单独抬版**（见 docs/packaging-fpk.md 版本号策略）；下列修复均包含在 0.1.2-rc.1 的 fpk 内。
+
+### 根因修复：桌面打开 401 `authentication required; reopen the URL printed by dsh web`
+
+上游 0.1.2 给 dsh web 加了浏览器鉴权：每次进程启动铸一次性 launch token（打印在启动日志的 URL 里），浏览器凭 `GET /?token=…` 换 30 天 authority 绑定 cookie，之后裸开 `/` 靠 cookie 通过。fpk 桌面入口是静态 URL（裸 `/`），cookie 一旦过期/换浏览器/换访问地址（IP ↔ fnos.net ↔ Tailscale，cookie 按主机名+端口绑定）就 401，且用户无从拿到新 token。
+
+修复（cmd/main 运行时 patch，幂等）：
+
+- **browser-auth 放行**：`dsh-client-connection` 的 `isAuthenticated()` 早返回 true。安全性由既有的 Host/Origin 信任围栏承担——该检查（403）在鉴权（401）**之前**执行，能走到鉴权的请求必然已属于 loopback / `--trusted-host` 白名单，与特权 API 放行是同一信任决策。副作用：带旧 token 的书签 URL 会被 303 到干净的 `/`（不再 401）。
+- **启动 URL 落盘**：启动后台抓取日志中最新一条 `dsh web: …?token=…` 写入 `${DATA_DIR}/dsh-web-url.txt`，作为参考/应急入口（如需在围栏外访问时可手动关掉 patch 用真鉴权）。
+- **信任面说明**：此补丁等效于"浏览器免密"，访问控制完全依赖 `--trusted-host` 列表（本机非回环 IP + fnos.net + `trusted_hosts.conf` 自定义条目）。请勿把 28000 端口暴露到不受信任的网络。
 
 ### 上游主要变更（0.1.1-rc.2 → 0.1.2-rc.1）
 - **会话流改进**：已完成回答前过程内容默认折叠（含 System prompt）、正文宽度自适应/拖拽调整、回合导航支持预览跳转未载入轮次、回答末尾显示 token 用量与耗时

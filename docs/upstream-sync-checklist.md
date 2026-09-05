@@ -115,7 +115,7 @@ grep 'install_dep_apps' manifest   # 期望 nodejs_v24:bunjs
 | 3 | settings memory→host | **仍必需，模式已变**：三元表达式接收者 `connection.` → `ctx.remote.$host.`；`dsh-client-ui-settings-models` 不再含此模式 | `patch_settings_memory.py` 已改为正则匹配（兼容新旧两版），settings 主包未命中即 exit 1 |
 | 4 | `--trusted-host` CLI | 仍在 `dsh-web-app`（`--trusted-host <authority...>` variadic 不变） | 无需改动 |
 | 5 | cordis.patch.yml 绑 0.0.0.0 | CLI 仍拒绝 `--host 0.0.0.0`（intentional for safety）；patch 机制仍在；**新增**：绑 0.0.0.0 时上游原生派生 LAN IP 信任（`resolveLanTrust`） | 机制仍必要且有效 |
-| 6 | 浏览器鉴权放行（client-connection `isAuthenticated` 早返回） | **rc.2 新增**：上游 0.1.2 加浏览器 token 鉴权（launch token → 30 天 authority 绑定 cookie），静态桌面入口裸 `/` 会 401 | cmd/main 运行时 patch 幂等注入；信任面 = Host/Origin 围栏 + `--trusted-host`；另落盘 `dsh-web-url.txt` 备用 |
+| 6 | 浏览器鉴权放行（client-connection `isAuthenticated` 早返回） | **本地补丁覆盖（不抬 fpk 版本号）**：上游 0.1.2 加浏览器 token 鉴权（launch token → 30 天 authority 绑定 cookie），静态桌面入口裸 `/` 会 401 | cmd/main 运行时 patch 幂等注入；信任面 = Host/Origin 围栏 + `--trusted-host`；另落盘 `dsh-web-url.txt` 备用 |
 
 ### 0.1.2+ 的构建后校验命令
 
