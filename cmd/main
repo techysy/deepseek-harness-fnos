@@ -191,13 +191,28 @@ old3 = 'const trustedHosts = options.authority === "loopback" ? [] : this.truste
 new3 = 'const trustedHosts = this.trustedHosts;'
 if old3 in s and new3 not in s:
     s = s.replace(old3, new3); changed = True
+# 浏览器鉴权放行: dsh web 启动铸一次性 launch token (打印在日志), 浏览器凭
+# GET /?token= 换 30 天 authority 绑定 cookie; 裸开 / 无 cookie 即 401
+# "authentication required; reopen the URL printed by dsh web" — fpk 桌面入口
+# 是静态 URL, 每次重启 token 都变, 用户没法感知. 放行依据: Host/Origin 信任
+# 围栏 (api-request-trust, 403) 在鉴权 (401) 之前执行, 能走到鉴权的请求必然
+# 已属于 loopback / --trusted-host 白名单 — 与上面特权 API 放行是同一信任决策.
+old4 = "isAuthenticated(request) {\n\t\tconst authority = requestAuthority(request.headers);"
+new4 = "isAuthenticated(request) {\n\t\treturn true; /* fnos-fpk: browser token auth off, host/origin trust fence is the gate */\n\t\tconst authority = requestAuthority(request.headers);"
+if old4 in s and new4 not in s:
+    s = s.replace(old4, new4); changed = True
 if changed:
     open(p, "w", encoding="utf-8").write(s)
-    print("privileged-fence patched")
+    print("privileged-fence patched" if new1 in s or new2 in s else "privileged-fence already patched", end="")
+    print(" + browser-auth bypassed" if new4 in s else " + browser-auth patch FAILED (pattern mismatch)")
 elif "isTrustedApiRequest(request, this.trustedHosts)" in s or "isTrustedApiRequest(request, trustedHosts)" in s:
     print("privileged-fence native in upstream (>=0.1.2), no patch needed")
 else:
     print("privileged-fence already patched")
+if new4 in s:
+    print("browser-auth: token auth off (trust fence only); launch-token URLs still redirect to clean /")
+elif old4 in s:
+    print("WARNING: browser-auth patch did not apply — desktop entry will 401 until token URL visited")
 PATCHPY
     fi
     # 启动 dsh web: 不带 --host (让 patch 的 0.0.0.0 生效), 显式传 --port + trusted-host
@@ -250,6 +265,19 @@ PATCHPY
     echo $! > "${DSH_PID}"
     log "dsh web started (pid $(cat "${DSH_PID}")) :0.0.0.0:${DSH_PORT} (patch: host 0.0.0.0) trusted-host:${TRUSTED_HOST_VALUES}"
     sleep 3
+    # 落盘带 token 的访问 URL (参考/应急): 启动日志形如
+    #   dsh web: http://127.0.0.1:28000/?token=… (LAN: http://192.168.x.x:28000/?token=…)
+    # 浏览器鉴权已被 fpk patch 关闭(信任围栏兜底), 平时无需此文件; dsh 重启后 token 会变,
+    # 这里始终抓最后一次启动的输出.
+    ( sleep 6
+      URL_LINE="$(grep -o 'dsh web: .*' "${DSH_LOG}" 2>/dev/null | tail -1 || true)"
+      if [ -n "${URL_LINE}" ]; then
+          printf '%s\n' "${URL_LINE#dsh web: }" > "${DATA_DIR}/dsh-web-url.txt"
+          log "web url (token) -> ${DATA_DIR}/dsh-web-url.txt"
+      else
+          log "no launch-token URL in log (browser-auth patch active, expected on later runs)"
+      fi
+    ) &
 }
 
 # 启动统一网关代理 (Unix socket → 127.0.0.1:DSH_PORT)

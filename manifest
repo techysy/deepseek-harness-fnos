@@ -1,8 +1,8 @@
 appname               = dsh
-version               = 0.1.2-rc.1
+version               = 0.1.2-rc.2
 display_name          = DeepSeek Harness
 desc                  = DeepSeek Harness 自托管版 — 基于 @deepseek-ai/dsh v0.1.2-rc.1，离线打包，局域网直连 NAS_IP:28000
-changelog             = v0.1.2-rc.1: 升级上游 0.1.2-rc.1（会话折叠/回合导航/token 用量/连接状态/子代理模型选择），信任围栏与 LAN 补丁延续
+changelog             = v0.1.2-rc.2: 修复桌面打开 401 "authentication required; reopen the URL printed by dsh web" — 浏览器 token 鉴权对信任围栏内请求放行(运行时 patch)，启动带 token URL 落盘 dsh-web-url.txt 备用
 platform              = x86
 source                = thirdparty
 maintainer            = techysy
