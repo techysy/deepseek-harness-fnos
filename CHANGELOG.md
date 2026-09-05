@@ -19,7 +19,7 @@
 
 ## 0.1.2-rc.1 (2026-09-06)
 
-> 升级上游 `@deepseek-ai/dsh` 到 0.1.2-rc.2（npm `latest` 标签，0.1.3-alpha.1 未上 npm 且含已知性能回退，暂不跟进）。打包方式不变：x86 npm install 离线打包 + polyfill/补丁注入。同步修正 package-lock.json（此前仍锁在 0.1.0-rc.7）。
+> 升级上游 `@deepseek-ai/dsh` 到 0.1.2-rc.1（npm `latest` 标签，0.1.3-alpha.1 未上 npm 且含已知性能回退，暂不跟进）。打包方式不变：x86 npm install 离线打包 + polyfill/补丁注入。同步修正 package-lock.json（此前仍锁在 0.1.0-rc.7）。
 
 ### 上游主要变更（0.1.1-rc.2 → 0.1.2-rc.1）
 - **会话流改进**：已完成回答前过程内容默认折叠（含 System prompt）、正文宽度自适应/拖拽调整、回合导航支持预览跳转未载入轮次、回答末尾显示 token 用量与耗时
