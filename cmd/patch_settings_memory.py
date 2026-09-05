@@ -4,10 +4,11 @@ Patch dsh settings frontend so plugin/model configuration works over non-loopbac
 (FN Connect domain) access.
 
 Why:
-  dsh's `dsh-client-ui-settings` and `dsh-client-ui-settings-models` frontends pick
-  the settings persistence mode from `connection.isLoopback`:
+  dsh's `dsh-client-ui-settings` frontend picks the settings persistence mode from
+  whether the server connection is loopback:
 
-      new SettingsScopeController(api, spec, connection.isLoopback ? "host" : "memory")
+      0.1.1-rc.2:  connection.isLoopback ? "host" : "memory"
+      0.1.2-rc.1:  ctx.remote.$host.isLoopback ? "host" : "memory"
 
   - loopback  (127.0.0.1)      -> "host"   -> reads server settings  -> config OK
   - non-loopback (domain/remote)-> "memory" -> process-local only, settings RPC is
@@ -17,6 +18,8 @@ Why:
   server settings. NOTE: this lifts dsh's intentional loopback-only guard on config
   RPC; combine with FN Connect authentication / network access control.
 
+  (0.1.2-rc.1 起 `dsh-client-ui-settings-models` 不再含该三元表达式, 无需补丁)
+
 Usage:
   python3 patch_settings_memory.py [--dry-run] [TARGET_ROOT]
   TARGET_ROOT defaults to <script>/../app/server/node_modules/@deepseek-ai
@@ -24,11 +27,12 @@ Usage:
 """
 import glob
 import os
+import re
 import sys
 
-# The exact expression dsh uses to pick the settings persistence mode.
-# We replace the whole ternary with the literal "host".
-OLD = 'connection.isLoopback ? "host" : "memory"'
+# 匹配任意接收者的 isLoopback 三元表达式 (connection. / ctx.remote.$host. / 未来变更),
+# 整体替换为字面量 "host". 仅处理字面格式 (bundle 固定带空格), 不做激进正则.
+TERNARY = re.compile(r'[\w.$]+\.isLoopback \? "host" : "memory"')
 NEW = '"host"'
 
 MARKER = "/* dsh-fnos: settings host-mode patch */"
@@ -63,8 +67,8 @@ def main():
 
     targets = find_targets(root)
     if not targets:
-        print(f"WARN: no target client.js found under {root}")
-        sys.exit(0)
+        print(f"ERROR: no settings client.js found under {root} (包结构变化?)")
+        sys.exit(1)
 
     modified, skipped = [], []
     for path in targets:
@@ -73,11 +77,11 @@ def main():
         if MARKER in content:
             skipped.append(path)
             continue
-        if OLD not in content:
-            print(f"WARN: pattern not found (already patched?): {path}")
+        if not TERNARY.search(content):
+            print(f"WARN: isLoopback ternary not found (上游已修复或改写?): {path}")
             skipped.append(path)
             continue
-        new_content = content.replace(OLD, NEW)
+        new_content = TERNARY.sub(NEW, content)
         # Add a marker comment at the top so re-runs are idempotent.
         if new_content.startswith("window.__ModuleLoader__"):
             new_content = "/* dsh-fnos: settings host-mode patch */\n" + new_content
@@ -95,6 +99,9 @@ def main():
         print("  +", p)
     for p in skipped:
         print("  = (skipped)", p)
+    # settings 主包必须命中, 否则 LAN 访问设置页空白
+    if not modified and not any(MARKER in open(p, encoding="utf-8").read() for p in targets):
+        sys.exit(1)
 
 
 if __name__ == "__main__":

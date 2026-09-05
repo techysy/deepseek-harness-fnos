@@ -30,10 +30,22 @@ DeepSeek 官方 Agent 浏览器 UI（一切皆插件）的 fnOS 快捷入口。
 
 ## 构建
 
+两条打包路径（详见 [docs/packaging-fpk.md](docs/packaging-fpk.md)）：
+
+**GitHub Actions 在线打包（推荐）** — 手动触发，产出到 artifacts：
+
 ```bash
-bash scripts/build.sh            # url 版 + iframe 版，交付到 fpk/deepseek-harness/
-bash scripts/build.sh --formal   # 正式版
+gh workflow run build-fpk.yml -f arch=x86    # 或 -f arch=arm
+gh run watch                                  # 下载: gh run download <run-id>
 ```
+
+**离线脚本**（NAS 本机，x86 打包机 / ARM 详见 [docs/arm-build.md](docs/arm-build.md)）：
+
+```bash
+bash scripts/build-x86-offline.sh             # url 版 + iframe 版，交付到应用中心扫描目录
+```
+
+上游升级 SOP 与补丁核对：[docs/upstream-sync-checklist.md](docs/upstream-sync-checklist.md)。
 
 ## 安装
 

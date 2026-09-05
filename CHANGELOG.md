@@ -14,9 +14,11 @@
 - **文件/图片**：图片发送后立即显示，压缩上传后台继续；上下文压缩计入图片占用
 - 上游 0.1.2 系列破坏性变更（SessionHandle / session v2 格式）仅影响插件与 SDK 开发者，老会话日志自动迁移
 
-### 升级注意（打包机 101 验证项）
-- npm install 后确认 `patch_settings_memory.py` 补丁仍命中（脚本 `|| true` 静默跳过，需抽查输出/设置页 LAN 行为）
-- 确认 web-frontend `dist/index.html` 存在且 crypto polyfill 注入成功
+### 升级注意（补丁核对结论，详见 docs/upstream-sync-checklist.md）
+- **privileged-fence 补丁不再需要**：0.1.2 上游已原生修复（`requestRejection` 统一 `trustedHosts`），`--trusted-host` 原生生效；运行时 patch 自动跳过
+- **crypto polyfill 不再需要**：0.1.2 前端 bundle 零引用 `randomUUID`（注入保留，无害幂等）
+- **settings memory→host 补丁仍必需且已适配**：三元表达式接收者 `connection.` → `ctx.remote.$host.`，`patch_settings_memory.py` 改正则匹配兼容新旧版，主包未命中 exit 1
+- `--trusted-host` CLI（variadic 不变）、cordis.patch.yml 绑 0.0.0.0（CLI 仍拒绝 0.0.0.0）机制均验证有效；新版绑 0.0.0.0 时上游原生派生 LAN IP 信任（resolveLanTrust）
 - 老用户升级后首次打开会触发 session v2 迁移，留意历史会话加载速度
 
 ## 0.1.1-rc.2 (2026-08-22)

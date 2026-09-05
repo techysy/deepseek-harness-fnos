@@ -194,6 +194,8 @@ if old3 in s and new3 not in s:
 if changed:
     open(p, "w", encoding="utf-8").write(s)
     print("privileged-fence patched")
+elif "isTrustedApiRequest(request, this.trustedHosts)" in s or "isTrustedApiRequest(request, trustedHosts)" in s:
+    print("privileged-fence native in upstream (>=0.1.2), no patch needed")
 else:
     print("privileged-fence already patched")
 PATCHPY

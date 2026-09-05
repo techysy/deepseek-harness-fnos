@@ -104,6 +104,36 @@ grep -c 'bunjs' cmd/main           # 期望 ≥1 (bun PATH)
 grep 'install_dep_apps' manifest   # 期望 nodejs_v24:bunjs
 ```
 
+## 0.1.2-rc.1 同步验证结果（2026-09-06）
+
+> 对 `@deepseek-ai/dsh@0.1.2-rc.1`（npm `latest`）逐个核对了本地补丁，结论如下：
+
+| # | 补丁 | 0.1.2-rc.1 状态 | 处理 |
+|---|------|----------------|------|
+| 1 | crypto.randomUUID polyfill（index.html） | **不再需要**：前端 `dsh-web-frontend/dist`、所有 `client-ui-*` 的 client.js 均零引用 `randomUUID`（只剩 server 端 `dsh-client-connection` 使用） | 保留注入（无害幂等），文档标注过时 |
+| 2 | 特权 API fence 放宽（client-connection） | **上游已原生修复**：`requestRejection()` 统一走 `isTrustedApiRequest(request, this.trustedHosts)`，`[]` 钉扎已移除；`--trusted-host` 原生生效 | 运行时 patch 无命中自动跳过（日志提示 native） |
+| 3 | settings memory→host | **仍必需，模式已变**：三元表达式接收者 `connection.` → `ctx.remote.$host.`；`dsh-client-ui-settings-models` 不再含此模式 | `patch_settings_memory.py` 已改为正则匹配（兼容新旧两版），settings 主包未命中即 exit 1 |
+| 4 | `--trusted-host` CLI | 仍在 `dsh-web-app`（`--trusted-host <authority...>` variadic 不变） | 无需改动 |
+| 5 | cordis.patch.yml 绑 0.0.0.0 | CLI 仍拒绝 `--host 0.0.0.0`（intentional for safety）；patch 机制仍在；**新增**：绑 0.0.0.0 时上游原生派生 LAN IP 信任（`resolveLanTrust`） | 机制仍必要且有效 |
+
+### 0.1.2+ 的构建后校验命令
+
+```bash
+# [3] settings host-mode 补丁 (新版唯一仍需的构建期补丁)
+grep -c 'dsh-fnos: settings host-mode patch' \
+  app/server/node_modules/@deepseek-ai/dsh-client-ui-settings/lib/client.js   # 期望 ≥1
+# 旧三元表达式应清零
+grep -c 'isLoopback ? "host" : "memory"' \
+  app/server/node_modules/@deepseek-ai/dsh-client-ui-settings/lib/client.js   # 期望 0
+
+# [2] fence 已原生 (informational, 0.1.2+ 期望命中)
+grep -c 'isTrustedApiRequest(request, this.trustedHosts)' \
+  app/server/node_modules/@deepseek-ai/dsh-client-connection/lib/index.js     # 期望 ≥1
+
+# [1] polyfill (0.1.2+ 不再需要, 可选)
+grep -c 'randomUUID' app/server/node_modules/@deepseek-ai/dsh-web-frontend/dist/index.html
+```
+
 ## FN Connect ID 信任域（设置页）
 
 设置页只填 **FN ID**（如 `techysy`），回调自动拼成两个信任域写入 `trusted_hosts.conf`：

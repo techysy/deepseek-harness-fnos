@@ -75,6 +75,25 @@ jobs:
           cd app/server
           ls -la node_modules/@deepseek-ai/dsh/lib/bin.js 2>&1 || echo "WARN: bin.js not found"
 
+      # ── 应用本地补丁 (与 scripts/build-x86-offline.sh 保持一致) ────────
+      # 1) crypto.randomUUID polyfill: LAN IP 访问为非安全上下文, 缺 randomUUID 会导致前端异常
+      # 2) settings memory→host: 非 loopback (FN Connect 域名/LAN IP) 访问时设置页读不到服务端配置
+      - name: 注入 crypto.randomUUID polyfill
+        run: |
+          INDEX="app/server/node_modules/@deepseek-ai/dsh-web-frontend/dist/index.html"
+          test -f "${INDEX}" || { echo "ERROR: ${INDEX} not found"; exit 1; }
+          python3 scripts/inject_crypto_polyfill.py "${INDEX}"
+          grep -q "crypto.randomUUID" "${INDEX}" || { echo "ERROR: polyfill 注入失败"; exit 1; }
+
+      - name: 应用 settings memory→host 补丁
+        run: |
+          python3 cmd/patch_settings_memory.py app/server/node_modules/@deepseek-ai
+          # 补丁脚本对目标缺失仅 WARN (exit 0), 这里硬校验防止静默漏补
+          HITS=$(grep -rl 'dsh-fnos: settings host-mode patch' \
+            app/server/node_modules/@deepseek-ai/dsh-client-ui-settings/lib/client.js \
+            app/server/node_modules/@deepseek-ai/dsh-client-ui-settings-models/lib/client.js 2>/dev/null | wc -l)
+          [ "${HITS}" -ge 1 ] || { echo "ERROR: settings 补丁未命中 (上游代码结构可能已变化)"; exit 1; }
+
       # ── 下载 fnpack ───────────────────────────────────────────────────
       - name: 下载 fnpack (飞牛官方打包工具)
         env:
