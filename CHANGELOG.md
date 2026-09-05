@@ -1,5 +1,24 @@
 # CHANGELOG
 
+## 0.1.2-rc.1 (2026-09-06)
+
+> 升级上游 `@deepseek-ai/dsh` 到 0.1.2-rc.2（npm `latest` 标签，0.1.3-alpha.1 未上 npm 且含已知性能回退，暂不跟进）。打包方式不变：x86 npm install 离线打包 + polyfill/补丁注入。同步修正 package-lock.json（此前仍锁在 0.1.0-rc.7）。
+
+### 上游主要变更（0.1.1-rc.2 → 0.1.2-rc.1）
+- **会话流改进**：已完成回答前过程内容默认折叠（含 System prompt）、正文宽度自适应/拖拽调整、回合导航支持预览跳转未载入轮次、回答末尾显示 token 用量与耗时
+- **界面**：统一次级文字层级、会话流字号调节、Markdown 表格随字号缩放、支持第三方语言
+- **子代理模型选择**：Agent 可在授权范围内自主选择，调用方可指定提供方/模型/推理力度；可为 Claude Code、Codex 配置模型
+- **连接稳定性**：界面显示连接状态，支持连接中断自动重试/立即重连；网关 WebSocket 心跳避免空闲断连
+- **修复 Node.js 24.0–24.11.1 启动可能失败且 HMR 失效的问题**（与 fnOS nodejs_v24 依赖相关）
+- **实验性功能**：Inspector 工具、Web Preview
+- **文件/图片**：图片发送后立即显示，压缩上传后台继续；上下文压缩计入图片占用
+- 上游 0.1.2 系列破坏性变更（SessionHandle / session v2 格式）仅影响插件与 SDK 开发者，老会话日志自动迁移
+
+### 升级注意（打包机 101 验证项）
+- npm install 后确认 `patch_settings_memory.py` 补丁仍命中（脚本 `|| true` 静默跳过，需抽查输出/设置页 LAN 行为）
+- 确认 web-frontend `dist/index.html` 存在且 crypto polyfill 注入成功
+- 老用户升级后首次打开会触发 session v2 迁移，留意历史会话加载速度
+
 ## 0.1.1-rc.2 (2026-08-22)
 
 > 升级上游 `@deepseek-ai/dsh` 到 0.1.1-rc.2。本地 3 处源码补丁 + polyfill 注入，pnpm monorepo 离线打包。

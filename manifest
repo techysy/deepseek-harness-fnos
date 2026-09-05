@@ -1,8 +1,8 @@
 appname               = dsh
-version               = 0.1.1-rc.2
+version               = 0.1.2-rc.1
 display_name          = DeepSeek Harness
-desc                  = DeepSeek Harness 自托管版 — 基于 @deepseek-ai/dsh v0.1.1-rc.2，离线打包，局域网直连 NAS_IP:28000
-changelog             = v0.1.1-rc.2: 升级上游 0.1.1-rc.2，修复 --host 0.0.0.0 支持，LAN 信任围栏，设置页 isLoopback 修复
+desc                  = DeepSeek Harness 自托管版 — 基于 @deepseek-ai/dsh v0.1.2-rc.1，离线打包，局域网直连 NAS_IP:28000
+changelog             = v0.1.2-rc.1: 升级上游 0.1.2-rc.1（会话折叠/回合导航/token 用量/连接状态/子代理模型选择），信任围栏与 LAN 补丁延续
 platform              = x86
 source                = thirdparty
 maintainer            = techysy
