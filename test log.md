@@ -2,6 +2,34 @@
 
 > 记录开发/测试迭代的历史更新详情。正式功能点聚合见 `CHANGELOG.md`。
 
+## 0.1.2-rc.1 (2026-09-06)
+
+> 升级上游 `@deepseek-ai/dsh` 到 0.1.2-rc.1（npm `latest`），首次走 GitHub Actions 在线打包（x86 44s，对比 NAS npm install 10min+）。fpk 版本跟随上游，桌面 401 修复以运行时补丁覆盖（不抬版本号）。
+
+### 测试报告
+
+**安装方式**：fnOS App Center 手动安装 `dsh-0.1.2-rc.1-iframe-x86.fpk`（Actions artifact `dsh-fpk-x86-99db3a7`，run 33984388938）
+
+**验证项**：
+
+| 检查项 | 结果 |
+|--------|------|
+| CI 构建补丁 | ✅ polyfill 注入 + settings memory→host `patched: 1`（settings-models 无此模式跳过，符合 0.1.2 上游结构） |
+| 服务启动 | ✅ 桌面入口打开正常（browser-auth 放行 patch 生效，不再 401） |
+| 本机/LAN 访问 | ✅ 信任围栏内放行（`--trusted-host` + 上游原生 `resolveLanTrust`） |
+| 工具卡片 | ✅ claw-fry-cards 端到端测试卡渲染正常（`🔧1`），卡片 schema 校验通过 |
+| 回答 footer 统计 | ✅ `⇲模型名 · 💭 · 🔧 · 上下文用量 · ⏱️` 显示正常（0.1.2 新特性） |
+| 过程内容折叠 | ✅ 0.1.2 默认行为：回答完成后折叠，可展开；send_message/回复类消息 footer 不带模型名（上游设计） |
+| FN Connect | ✅ 外网域名访问正常（用户实测） |
+| nodejs_v24 兼容 | ✅ 上游 0.1.2 修复了 Node 24.0–24.11.1 启动失败问题，本版本启动正常 |
+
+**过程记录**：
+- 初版 rc.1（run 33979436501）发现桌面打开 401 —— 上游 0.1.2 新增浏览器 token 鉴权（launch token → 30 天 authority cookie）与静态桌面入口冲突 → cmd/main 运行时 patch `isAuthenticated()` 放行（信任面 = Host/Origin 围栏 + `--trusted-host`），同版本重打包
+- 版本号策略确立：fpk 版本跟随上游发行版，本地修复不抬版（见 docs/packaging-fpk.md §1）
+- 补丁核对结论：privileged-fence / crypto polyfill 在 0.1.2 上游已原生修复或不再需要（详见 docs/upstream-sync-checklist.md）
+
+---
+
 ## 0.1.1-rc.2 (2026-08-22)
 
 > 升级上游 `@deepseek-ai/dsh` 到 0.1.1-rc.2。回归历史 `npm install` 打包方式（自包含 node_modules，无 symlink）。
