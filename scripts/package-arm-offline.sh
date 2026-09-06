@@ -66,6 +66,8 @@ rm -rf app/server/node_modules
 tar -xzf "${NM_TAR}" -C app/server/
 [ -f "app/server/node_modules/@deepseek-ai/dsh/lib/bin.js" ] || {
   echo "错误: 解压后缺少 @deepseek-ai/dsh/lib/bin.js, 归档可能不对" >&2; exit 1; }
+# 归档已解压就位, 删除以防 fnpack 打进 fpk (48MB 冗余)
+rm -f app/server/node_modules-*.tar.gz
 echo "==> node_modules 就位:"
 ls -d app/server/node_modules/@deepseek-ai/dsh 2>/dev/null
 

@@ -75,6 +75,12 @@ jobs:
           cd app/server
           ls -la node_modules/@deepseek-ai/dsh/lib/bin.js 2>&1 || echo "WARN: bin.js not found"
 
+      # ── 清理构建中间产物 (否则会被 fnpack 打进 fpk, ARM 包多 48MB) ──────
+      # build-arm-node-modules.sh 产出 node_modules-arm64.tar.gz 归档, node_modules
+      # 已解压就位后该归档仅为传输载体, 安装流程 (install_callback) 不引用
+      - name: 移除 node_modules 构建归档
+        run: rm -fv app/server/node_modules-*.tar.gz
+
       # ── 应用本地补丁 (与 scripts/build-x86-offline.sh 保持一致) ────────
       # 1) crypto.randomUUID polyfill: LAN IP 访问为非安全上下文, 缺 randomUUID 会导致前端异常
       # 2) settings memory→host: 非 loopback (FN Connect 域名/LAN IP) 访问时设置页读不到服务端配置
