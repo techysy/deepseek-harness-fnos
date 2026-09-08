@@ -78,7 +78,7 @@ docker run --rm \
 
     # npm install (native 模块在此 glibc 2.28 环境下编译)
     # npm cache 放容器内 /tmp, 避免落到宿主管控目录 (root 归属, 宿主无法清理)
-    npm install --no-audit --no-fund --ignore-engines
+    npm install --registry=https://registry.npmjs.org/ --no-audit --no-fund --ignore-engines
 
     # 将产物改为宿主可读可删 (node_modules 由 root 创建, 确保宿主能接管)
     chown -R "$(stat -c %u:%g /work/server)" node_modules 2>/dev/null || true

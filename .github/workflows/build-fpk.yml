@@ -58,7 +58,7 @@ jobs:
         if: inputs.arch == 'arm' && inputs.glibc_compat != 'true'
         run: |
           cd app/server
-          npm install --no-audit --no-fund
+          npm install --registry=https://registry.npmjs.org/ --no-audit --no-fund
           # 校验产物
           find node_modules -name "*.node" -type f | head -3 | xargs -I{} file {} 2>/dev/null || true
 
@@ -66,7 +66,7 @@ jobs:
         if: inputs.arch == 'x86'
         run: |
           cd app/server
-          npm install --no-audit --no-fund
+          npm install --registry=https://registry.npmjs.org/ --no-audit --no-fund
           find node_modules -name "*.node" -type f | head -3 | xargs -I{} file {} 2>/dev/null || true
 
       # ── 校验 node_modules 里 dsh 二进制存在 ────────────────────────────
