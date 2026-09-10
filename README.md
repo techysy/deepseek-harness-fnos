@@ -2,7 +2,7 @@
 
 [![GitHub release](https://img.shields.io/github/v/release/techysy/deepseek-harness-fnos?label=Latest&color=blue)](https://github.com/techysy/deepseek-harness-fnos/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://github.com/techysy/deepseek-harness-fnos/blob/main/LICENSE)
-[![dsh](https://img.shields.io/badge/dsh-0.1.2--rc.1-blueviolet.svg)](https://github.com/deepseek-ai/deepseek-harness)
+[![dsh](https://img.shields.io/badge/dsh-0.1.5--rc.1-blueviolet.svg)](https://github.com/deepseek-ai/deepseek-harness)
 [![fnOS](https://img.shields.io/badge/fnOS-1.1.31xx+-orange.svg)](https://developer.fnnas.com/docs/guide)
 [![Node.js](https://img.shields.io/badge/Node.js-v24-green.svg)]()
 [![bun](https://img.shields.io/badge/bun-v1.3.9-black.svg)]()
@@ -19,14 +19,14 @@ DeepSeek 官方 Agent 浏览器 UI（一切皆插件）的 fnOS 快捷入口。
 
 ## 版本说明
 
-当前版本：**0.1.2-rc.1**（升级上游 dsh 0.1.2-rc.1，修复桌面打开 401）
+当前版本：**0.1.5-rc.1**（升级上游 dsh 0.1.5-rc.1，桌面 401 补丁延续）
 
 | 文件 | 架构 | 类型 | 说明 |
 |------|------|------|------|
-| `dsh-0.1.2-rc.1-iframe-x86.fpk` | x86 | iframe | 桌面窗口内打开（**推荐**） |
-| `dsh-0.1.2-rc.1-x86.fpk` | x86 | url | 新标签页打开 |
-| `dsh-0.1.2-rc.1-iframe-arm.fpk` | ARM | iframe | 桌面窗口内打开（**推荐**） |
-| `dsh-0.1.2-rc.1-arm.fpk` | ARM | url | 新标签页打开 |
+| `dsh-0.1.5-rc.1-iframe-x86.fpk` | x86 | iframe | 桌面窗口内打开（**推荐**） |
+| `dsh-0.1.5-rc.1-x86.fpk` | x86 | url | 新标签页打开 |
+| `dsh-0.1.5-rc.1-iframe-arm.fpk` | ARM | iframe | 桌面窗口内打开（**推荐**） |
+| `dsh-0.1.5-rc.1-arm.fpk` | ARM | url | 新标签页打开 |
 
 全部为**离线包**（含对应架构 node_modules），安装免联网。ARM 版在 manylinux_2_28 容器构建，兼容旧 glibc。
 

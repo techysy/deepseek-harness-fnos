@@ -1,5 +1,26 @@
 # CHANGELOG
 
+## 0.1.5-rc.1 (2026-09-10)
+
+> 升级上游 `@deepseek-ai/dsh` 到 0.1.5-rc.1（npm `latest`，跨 0.1.3/0.1.4 两系列的汇总 rc）。打包方式不变：CI 在线构建（x86 + ARM）+ 补丁注入。fpk 版本号跟随上游、本地修复不抬版。
+
+### 上游主要变更（0.1.2-rc.1 → 0.1.5-rc.1）
+- **新模型**：DeepSeek 适配器新增 `DeepSeek-V41-Flash`（新会话默认模型）
+- **通用文件上传**：Web 支持任意类型文件，与图片同预览区混排、后台上传进度/取消/续显
+- **Sidebar 多标签**：右侧面板支持多标签/分栏/全屏，Markdown/代码/HTML/PDF/图片预览；Detail 面板移除
+- **性能**：改善长会话打开/恢复/持续对话卡顿，降低内存占用（0.1.3-alpha.1 的回退在 0.1.3-alpha.2 修复并延续）
+- **子代理消息**：排队/编辑/删除/Steer/停止，发送中状态提示
+- **修复**：Web 断线自动恢复、暂停目标立即终止模型轮次、流式工具调用空值覆盖 ID/名称
+- **破坏性变更（仅插件/SDK 开发者）**：会话数据格式 V3（旧日志自动迁移保留原文件，不支持降级读取）、SessionHandle 生命周期、默认工具调整（SDK/Headless/ACP 用 read/write/edit）
+
+### 升级注意（补丁核对结论，详见 docs/upstream-sync-checklist.md）
+- **settings memory→host 补丁**：目标模式 `ctx.remote.$host.isLoopback ? "host" : "memory"` 在 0.1.5-rc.1 原样保留 ✓；settings-models 仍无此模式
+- **privileged-fence**：上游保持原生修复（`requestRejection` 走 `trustedHosts`），patch 自动跳过 ✓
+- **桌面 401 补丁**：`isAuthenticated` old4 模式逐字节精确命中 ✓（调用点仍为 GET / 与 requestRejection 401 两个浏览器侧入口）
+- **`--trusted-host` CLI（variadic）/ cordis.patch.yml 0.0.0.0 绑定 / CLI 拒绝 `--host 0.0.0.0`** 均不变 ✓
+- **crypto polyfill**：前端 `dist/index.html` 存在但 randomUUID 仍零引用，注入保留无害
+- 老用户升级后首次打开触发 session V2→V3 迁移（保留原文件），留意迁移耗时
+
 ## 0.1.2-rc.1 (2026-09-06)
 
 > 升级上游 `@deepseek-ai/dsh` 到 0.1.2-rc.1（npm `latest` 标签，0.1.3-alpha.1 未上 npm 且含已知性能回退，暂不跟进）。打包方式不变：x86 npm install 离线打包 + polyfill/补丁注入。同步修正 package-lock.json（此前仍锁在 0.1.0-rc.7）。

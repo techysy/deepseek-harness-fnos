@@ -1,8 +1,8 @@
 appname               = dsh
-version               = 0.1.2-rc.1
+version               = 0.1.5-rc.1
 display_name          = DeepSeek Harness
-desc                  = DeepSeek Harness 自托管版 — 基于 @deepseek-ai/dsh v0.1.2-rc.1，离线打包，局域网直连 NAS_IP:28000
-changelog             = v0.1.2-rc.1: 升级上游 0.1.2-rc.1（会话折叠/回合导航/token 用量/连接状态），信任围栏与 LAN 补丁延续；本地补丁覆盖：桌面 401 修复（浏览器 token 鉴权对信任围栏内请求放行）
+desc                  = DeepSeek Harness 自托管版 — 基于 @deepseek-ai/dsh v0.1.5-rc.1，离线打包，局域网直连 NAS_IP:28000
+changelog             = v0.1.5-rc.1: 升级上游 0.1.5-rc.1（V3 会话格式/通用文件上传/Sidebar 多标签/长会话卡顿优化），信任围栏与桌面 401 补丁延续
 platform              = x86
 source                = thirdparty
 maintainer            = techysy
