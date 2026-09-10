@@ -2,6 +2,40 @@
 
 > 记录开发/测试迭代的历史更新详情。正式功能点聚合见 `CHANGELOG.md`。
 
+## 0.1.5-rc.1 (2026-09-10)
+
+> 升级上游 `@deepseek-ai/dsh` 到 0.1.5-rc.1（npm `latest`，跨 0.1.3/0.1.4 汇总 rc）。CI 双架构在线打包（x86 106MB / ARM 99MB artifacts），fpk 版本跟随上游。
+
+### 测试报告
+
+**安装方式**：fnOS App Center 手动安装 `dsh-0.1.5-rc.1-iframe-x86.fpk`（NAS 192.168.31.101，x86_64）。ARM 版用户装机未做自动化测试（与 x86 同构打包流程）。
+
+**验证项**：
+
+| 检查项 | 结果 |
+|--------|------|
+| manifest 版本 | ✅ 0.1.5-rc.1 |
+| 服务启动 | ✅ `dsh web started 0.0.0.0:28000`，app.log health OK 无错误 |
+| trusted-host 参数 | ✅ LAN IP + docker 网段 + fnos.net + techysy.fnos.net + dsh.techysy.fnos.net + techysy.5ddd.com（自定义域名随 trusted_hosts.conf 生效） |
+| HTTP 访问 | ✅ 127.0.0.1 / 192.168.31.101 均 200 |
+| settings host-mode 补丁 | ✅ client.js 标记命中（CI `patched: 1` + 装机复核） |
+| browser-auth 放行补丁（401 修复延续） | ✅ isAuthenticated 早返回标记命中，桌面裸开不 401 |
+| crypto polyfill | ✅ 首页 HTML 含 randomUUID |
+| proxy.py 网关 | ✅ app.sock → 28000 运行中，web url 落盘 dsh-web-url.txt |
+| ARM 包冗余 | ✅ CI 日志 `removed node_modules-arm64.tar.gz`，fpk 50M（上一版 48M 同级） |
+| 会话 V2→V3 迁移 | ✅ 上游自动迁移保留原文件（首次打开旧会话时触发） |
+
+**补丁核对（升级前逐项 grep 0.1.5-rc.1 包内容）**：
+- settings memory→host：`ctx.remote.$host.isLoopback ? "host" : "memory"` 原样保留 → 正则补丁命中
+- privileged-fence：上游保持原生修复，patch 自动跳过
+- 桌面 401 放行：`isAuthenticated` old4 模式逐字节精确命中
+- `--trusted-host` variadic / `ALL_INTERFACES_HOST` / CLI 拒绝 0.0.0.0：均不变
+- crypto polyfill：前端 randomUUID 仍零引用，注入保留无害
+
+**注意**：Detail 面板已移除（改为 Sidebar 多标签）；破坏性变更（SessionHandle/默认工具调整）仅影响插件/SDK 开发者。
+
+---
+
 ## 0.1.2-rc.1 (2026-09-06)
 
 > 升级上游 `@deepseek-ai/dsh` 到 0.1.2-rc.1（npm `latest`），首次走 GitHub Actions 在线打包（x86 44s，对比 NAS npm install 10min+）。fpk 版本跟随上游，桌面 401 修复以运行时补丁覆盖（不抬版本号）。
