@@ -153,3 +153,25 @@ ps aux | grep 'dsh.*web' | grep -v grep | grep -o 'trusted-host fnos.net'  # 默
 > 注意：`fnos.net` 是精确 hostname 匹配，**匹配不了子域**（`dsh.<id>.fnos.net` 需显式加入）。
 > FN Connect 应用子域 `dsh.<id>.fnos.net` 若外部访问 403，先确认 FN Connect 后台已发布该应用，
 > 而非 dsh 问题（nginx 网关 403 ≠ dsh fence 403）。
+
+## 现场排障：桌面打开 401（"dsh web authentication required; reopen the URL printed by dsh web"）
+
+上游 0.1.2+ 的浏览器 token 鉴权 + 静态桌面入口冲突（详见 CHANGELOG 0.1.2-rc.1 条目）。fpk 靠 `cmd/main` 启动时运行时补丁放行；**同版本包有人复现 401 = 他机器上补丁没打上**，按序排查：
+
+```bash
+# 1. 版本应 >= 0.1.2-rc.1 (0.1.0/0.1.1 上游无此鉴权, 不会报这个错)
+grep '^version' /var/apps/dsh/manifest
+
+# 2. 补丁标记 (1=在; 0=没打上 → 看第 3 步)
+grep -c 'fnos-fpk: browser token auth off'   /vol*/@appcenter/dsh/server/node_modules/@deepseek-ai/dsh-client-connection/lib/index.js
+
+# 3. 没打上的常见根因: /usr/bin/python3 缺失 (cmd/main 补丁脚本依赖, 部分 fnOS 无)
+ls /usr/bin/python3 || echo "python3 缺失 → 根因确认"
+
+# 4. 立即热修 (不依赖 python3, 用 node; 从 Gitee raw 拉, 国内快):
+curl -sL https://gitee.com/techysy/deepseek-harness-fnos/raw/main/scripts/fix-browser-auth-401.sh | sudo bash
+
+# 5. 打完必须 应用中心 → dsh → 重启 (运行中进程仍带旧代码)
+```
+
+> cmd/main 已加双重防御（commit 835d3fe：python3 失败自动 node 兜底；ecb5e60：补丁结果落 app.log `privileged-fence patch:` 行）——两者随下一个上游版本的 fpk 生效，老 fpk 用户用上面第 4 步热修。
