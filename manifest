@@ -13,3 +13,4 @@ desktop_uidir         = ui
 desktop_applaunchname = dsh.Application
 ctl_stop              = true
 checkport             = false
+install_dep_apps      = nodejs_v24:bunjs
