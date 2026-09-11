@@ -42,6 +42,19 @@ export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=4096}"
 
 command -v fnpack >/dev/null 2>&1 || { echo "错误: 未找到 fnpack (飞牛打包工具)" >&2; exit 1; }
 
+# fnpack 版本守卫: 1.2.4+ 拒绝预发布版本号 (Invalid version "x.y.z-rc.n"),
+# rc/alpha 打包固定用 1.2.1 (与 CI 一致), 自动下载到临时目录并 PATH 前置
+FPACK_VER="$(fnpack --help 2>&1 | grep -oE 'Version [0-9.]+' | awk '{print $2}')"
+case "${VERSION_SPEC:-}" in "") ;; esac
+if [ -n "${FPACK_VER}" ] && [ "${FPACK_VER}" != "1.2.1" ]; then
+  echo "==> fnpack ${FPACK_VER} 对预发布版本号过严, 切换 1.2.1 (临时, 不动系统)"
+  mkdir -p /tmp/fnpack121
+  curl -sL -o /tmp/fnpack121/fnpack "https://static2.fnnas.com/fnpack/fnpack-1.2.1-linux-amd64" \
+    && chmod +x /tmp/fnpack121/fnpack \
+    && export PATH="/tmp/fnpack121:${PATH}" \
+    || { echo "错误: fnpack 1.2.1 下载失败, 预发布版本将无法打包" >&2; exit 1; }
+fi
+
 # ---- 1. clone / 更新 fpk 源码 ----
 echo "==> 更新 fpk 源码..."
 mkdir -p "${BUILD_ROOT}"
@@ -63,6 +76,8 @@ echo "==> 版本: ${VERSION}"
 echo "==> npm install (生成自包含 x86 node_modules)..."
 cd app/server
 rm -rf node_modules
+# 删除仓库 lock (锁 npmjs 供 CI 用), NAS 用本地默认源 (npmmirror) 解析更快更稳
+rm -f package-lock.json
 npm install --no-audit --no-fund --ignore-engines
 [ -f "node_modules/@deepseek-ai/dsh/lib/bin.js" ] || {
   echo "错误: npm install 后缺少 @deepseek-ai/dsh/lib/bin.js" >&2; exit 1; }

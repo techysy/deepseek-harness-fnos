@@ -49,6 +49,19 @@ jobs:
           cd app/server
           npm pkg set "dependencies.@deepseek-ai/dsh=${{ inputs.dsh_version }}"
 
+      # ── manifest 必需字段校验 ─────────────────────────────────────────
+      # install_dep_apps 曾在升级时被误删 (3937309, 8/22-9/11 之间的包新装机
+      # 不会自动装 node24+bun), 此处硬校验防复发
+      - name: 校验 manifest 必需字段
+        run: |
+          grep -qE '^install_dep_apps[[:space:]]*=.*nodejs_v24' manifest \
+            || { echo "ERROR: manifest 缺少 install_dep_apps=nodejs_v24 声明 (新装机将无 node)"; exit 1; }
+          grep -qE '^appname[[:space:]]*=[[:space:]]*dsh$' manifest \
+            || { echo "ERROR: appname 必须为 dsh (FN Connect 域名一致性)"; exit 1; }
+          grep -qE '^version[[:space:]]*=' manifest \
+            || { echo "ERROR: manifest 缺少 version"; exit 1; }
+          echo "manifest 校验通过:" && grep -E '^(appname|version|install_dep_apps)' manifest
+
       # ── 构建 node_modules ─────────────────────────────────────────────
       - name: 构建 ARM64 node_modules (manylinux_2_28 容器, glibc 兼容)
         if: inputs.arch == 'arm' && inputs.glibc_compat == 'true'
