@@ -175,3 +175,32 @@ curl -sL https://gitee.com/techysy/deepseek-harness-fnos/raw/main/scripts/fix-br
 ```
 
 > cmd/main 已加双重防御（commit 835d3fe：python3 失败自动 node 兜底；ecb5e60：补丁结果落 app.log `privileged-fence patch:` 行）——两者随下一个上游版本的 fpk 生效，老 fpk 用户用上面第 4 步热修。
+
+## 现场排障：升级后 webui 崩溃循环（第三方插件不兼容）
+
+**症状**：升级 fpk 后 dsh web 反复崩溃重启（守护脚本/cron 每 60s 拉起），端口 28000 起后又消失；页面无法访问。日志可见插件树加载失败 → 进程退出。
+
+**根因**：跨大版本升级（如 0.1.2→0.1.5）插件 API 有破坏性变更（SessionHandle / session V3 / 默认工具调整），用户装过的第三方插件加载即崩。**fpk 本身无问题**——纯净安装不受影响，装了插件才会踩。
+
+**现场案例**：2026-09-12 朋友 NAS（FN ID howeverme，0.1.2→0.1.5），4 个不兼容插件崩溃循环，其 dsh agent 自诊断锁定插件名单。
+
+**处理流程**：
+
+```bash
+# 1. 停掉守护 cron (它每分钟拉起注定崩溃的进程, 干扰排查)
+crontab -l | grep -i dsh   # 找到后注释掉
+
+# 2. 从启动日志锁定加载失败的插件 (dsh 日志/插件目录按实际布局)
+#    (dsh 自身 agent 也能自诊断: 问它"为什么 webui 起不来"即可锁定名单)
+
+# 3. 把不兼容插件移出插件目录 → 启动 dsh web 验证恢复
+
+# 4. 逐个恢复插件:
+#    - 有兼容新版本 → 升级插件
+#    - 没有 → 用 oh-my-dsh 迁移 skill 适配:
+#      https://github.com/oh-my-dsh/dsh-plugin-upgrade-skill
+#      (上游官方 notes 推荐, 帮插件作者适配 DSH 版本升级)
+```
+
+> 发布侧已配套：GitHub/Gitee Release notes「升级注意」明确警告第三方插件用户。
+> 相关：升级前先记录已装插件名单，升级后崩溃时可快速比对。
