@@ -88,6 +88,14 @@ bash scripts/build-x86-offline.sh              # url + iframe 两个 fpk
 
 依赖：nodejs_v24（fnOS 依赖应用）、fnpack、python3。npm 堆内存已内置 `--max-old-space-size=4096`（依赖树大，默认 1024 会 OOM）。
 
+> ⚠️ **fnpack 版本坑（2026-09-11 踩过）**：NAS 本地的 fnpack 1.2.4 拒绝预发布版本号（`Invalid version "0.1.5-rc.1". Expected format: x.y.z[-r]`），而 CI 用的 1.2.1 接受。rc/alpha 版本 NAS 打包时用 1.2.1：
+> ```bash
+> curl -sL -o /tmp/fnpack-1.2.1 https://static2.fnnas.com/fnpack/fnpack-1.2.1-linux-amd64
+> mkdir -p /tmp/fnpack121 && cp /tmp/fnpack-1.2.1 /tmp/fnpack121/fnpack && chmod +x /tmp/fnpack121/fnpack
+> PATH="/tmp/fnpack121:$PATH" bash scripts/build-x86-offline.sh
+> ```
+> （放 PATH 前部即可，不必覆盖系统 fnpack。另：NAS 构建目录记得删掉 app/server/package-lock.json——仓库 lock 锁 npmjs，NAS 直连慢。）
+
 > 历史：0.1.1-rc.2 曾误用 pnpm workspace 源码构建，node_modules 全 symlink 导致
 > fnpack `copy_file_range` 报错、安装后依赖链断裂（fpk 394M）。**统一回归 npm install
 > 扁平布局**（fpk ~48M，`@deepseek-ai/dsh` 为实体目录）。
