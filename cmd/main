@@ -215,7 +215,32 @@ if new4 in s:
 elif old4 in s:
     print("WARNING: browser-auth patch did not apply — desktop entry will 401 until token URL visited")
 PATCHPY
-2>&1); log "privileged-fence patch: ${patch_out:-no output}"
+2>&1)
+        # python3 不可用/失败时用 node 兜底 (dsh 硬依赖 nodejs_v24, 必存在);
+        # 部分 fnOS 环境 /usr/bin/python3 缺失曾致补丁静默失败 → 桌面 401
+        if [ -z "$patch_out" ] || echo "$patch_out" | grep -qi "error\|traceback\|not found"; then
+            log "privileged-fence patch: python3 不可用或失败, 尝试 node 兜底"
+            patch_out=$("${NODE_BIN:-node}" -e '
+const fs = require("fs");
+const p = process.argv[1];
+let s = fs.readFileSync(p, "utf8"), changed = false;
+const reps = [
+  ["PRIVILEGED_METHODS.has(method) && !isTrustedApiRequest(request, []))",
+   "PRIVILEGED_METHODS.has(method) && !isTrustedApiRequest(request, trustedHosts))"],
+  ["if (interceptor.options.authority === \"loopback\" && !isTrustedApiRequest(request, []))",
+   "if (interceptor.options.authority === \"loopback\" && !isTrustedApiRequest(request, this.trustedHosts))"],
+  ["const trustedHosts = options.authority === \"loopback\" ? [] : this.trustedHosts;",
+   "const trustedHosts = this.trustedHosts;"],
+  ["isAuthenticated(request) {\n\t\tconst authority = requestAuthority(request.headers);",
+   "isAuthenticated(request) {\n\t\treturn true; /* fnos-fpk: browser token auth off, host/origin trust fence is the gate */\n\t\tconst authority = requestAuthority(request.headers);"]
+];
+for (const [o, n] of reps) { if (s.includes(o) && !s.includes(n)) { s = s.split(o).join(n); changed = true; } }
+if (changed) { fs.writeFileSync(p, s); console.log("node fallback: patched"); }
+else if (reps.some(([,n]) => s.includes(n)) || s.includes("fnos-fpk: browser token auth off")) console.log("already patched");
+else console.log("WARNING: no pattern matched (upstream code changed?)");
+' "${CC_LIB}" 2>&1)
+        fi
+        log "privileged-fence patch: ${patch_out:-no output}"
     else
         log "privileged-fence patch: SKIP (dsh-client-connection/lib/index.js 未找到, CC_LIB 定位失败 — 检查安装布局)"
     fi
