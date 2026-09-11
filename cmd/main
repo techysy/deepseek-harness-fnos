@@ -171,7 +171,8 @@ PATCHEOF
         [ -f "$cand" ] && CC_LIB="$cand" && break
     done
     if [ -n "${CC_LIB}" ]; then
-        /usr/bin/python3 - "${CC_LIB}" <<'PATCHPY'
+        # patch 结果落 app.log (远程可诊断, 否则只打 stdout 装完即丢)
+        patch_out=$(/usr/bin/python3 - "${CC_LIB}" <<'PATCHPY'
 import sys
 p = sys.argv[1]
 s = open(p, encoding="utf-8").read()
@@ -214,6 +215,9 @@ if new4 in s:
 elif old4 in s:
     print("WARNING: browser-auth patch did not apply — desktop entry will 401 until token URL visited")
 PATCHPY
+2>&1); log "privileged-fence patch: ${patch_out:-no output}"
+    else
+        log "privileged-fence patch: SKIP (dsh-client-connection/lib/index.js 未找到, CC_LIB 定位失败 — 检查安装布局)"
     fi
     # 启动 dsh web: 不带 --host (让 patch 的 0.0.0.0 生效), 显式传 --port + trusted-host
     # DSH_ARGS 非空时 = 用 node <bin.js> 运行 (无 bin 链接的兜底)
