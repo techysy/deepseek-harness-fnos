@@ -96,6 +96,8 @@ bash scripts/build-x86-offline.sh              # url + iframe 两个 fpk
 > ```
 > （放 PATH 前部即可，不必覆盖系统 fnpack。另：NAS 构建目录记得删掉 app/server/package-lock.json——仓库 lock 锁 npmjs，NAS 直连慢。）
 
+> ⚠️ **manifest 改动防误删（2026-09-11 踩过）**：`install_dep_apps = nodejs_v24:bunjs` 是**必需声明**（新装机自动装/启用 node24+bun，dsh 运行与补丁 node 兜底都靠它），3937309 升级时曾被误删（8/22–9/11 之间的包都没有），4a7ce62 恢复。改 manifest 时逐行核对这段。
+
 > 历史：0.1.1-rc.2 曾误用 pnpm workspace 源码构建，node_modules 全 symlink 导致
 > fnpack `copy_file_range` 报错、安装后依赖链断裂（fpk 394M）。**统一回归 npm install
 > 扁平布局**（fpk ~48M，`@deepseek-ai/dsh` 为实体目录）。
