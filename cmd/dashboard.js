@@ -10,6 +10,7 @@
  */
 "use strict";
 const http = require("http");
+const https = require("https");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
@@ -100,7 +101,8 @@ function pidAlive(pid) {
 function httpGet(url, timeout = 6000) {
   return new Promise(resolve => {
     try {
-      const req = http.get(url, { timeout }, res => {
+      const mod = url.startsWith("https:") ? https : http;
+      const req = mod.get(url, { timeout, headers: { "User-Agent": "dsh-dashboard" } }, res => {
         let d = ""; res.on("data", c => (d += c)); res.on("end", () => resolve({ ok: true, status: res.statusCode, body: d }));
       });
       req.on("timeout", () => { req.destroy(); resolve({ ok: false }); });
@@ -119,7 +121,15 @@ async function apiStatus() {
   const proxyPid = (() => { try { return fs.readFileSync(path.join(DATA_DIR, "proxy.pid"), "utf8").trim(); } catch { return ""; } })();
   return {
     fpkVersion: manifestField("version"),
-    dshPkgVersion: (() => { try { return JSON.parse(fs.readFileSync(path.join(DSH_HOME, "profiles/web/node_modules/@deepseek-ai/dsh/package.json", ), "utf8")).version; } catch { try { return JSON.parse(fs.readFileSync(path.join(APP_DIR, "server/node_modules/@deepseek-ai/dsh/package.json"), "utf8")).version; } catch { return "?"; } } })(),
+    dshPkgVersion: (() => {
+      const cands = [
+        path.join(APP_DIR, "server/node_modules/@deepseek-ai/dsh/package.json"),
+        path.join(APP_DIR, "target/server/node_modules/@deepseek-ai/dsh/package.json"),
+      ];
+      try { for (const v of fs.readdirSync("/")) { if (/^vol\d+$/.test(v)) cands.push(path.join("/", v, "@appcenter/dsh/server/node_modules/@deepseek-ai/dsh/package.json")); } } catch {}
+      for (const c of cands) { try { return JSON.parse(fs.readFileSync(c, "utf8")).version; } catch {} }
+      return "?";
+    })(),
     dsh: { pid, running: !!running, uptime, health: h.ok && h.status === 200 ? "OK" : "不可达", port: DSH_PORT },
     proxy: { running: !!(proxyPid && pidAlive(proxyPid)) },
     dashboard: process.pid,
