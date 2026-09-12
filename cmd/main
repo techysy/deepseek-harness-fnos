@@ -315,7 +315,7 @@ start_proxy() {
     if [ -f "${PROXY_PID}" ] && kill -0 "$(cat "${PROXY_PID}")" 2>/dev/null; then
         return 0
     fi
-    PY=/usr/bin/python3
+    PY="$(command -v python3 || echo /usr/bin/python3)"
     DSH_PORT="${DSH_PORT}" SOCK_PATH="${SOCK_PATH}" \
       nohup "${PY}" "${PROXY_SRC}" >> "${PROXY_LOG}" 2>&1 &
     echo $! > "${PROXY_PID}"
@@ -323,11 +323,32 @@ start_proxy() {
     sleep 1
 }
 
+# 启动独立管理面板 (dashboard.js, 端口 28001): 状态/日志/插件管理/版本检查
+DASH_LOG="${DATA_DIR}/dashboard.log"
+DASH_PID="${DATA_DIR}/dashboard.pid"
+DASH_PORT="${DASH_PORT:-28001}"
+start_dashboard() {
+    [ -f "${CMD_DIR}/dashboard.js" ] || { log "dashboard: dashboard.js not found, skip"; return 0; }
+    if [ -f "${DASH_PID}" ] && kill -0 "$(cat "${DASH_PID}")" 2>/dev/null; then
+        return 0
+    fi
+    DASH_NODE="${NODE_BIN}"
+    [ -x "${DASH_NODE}" ] || DASH_NODE="$(command -v node)"
+    [ -x "${DASH_NODE}" ] || { log "dashboard: no node, skip"; return 0; }
+    DASH_PORT="${DASH_PORT}" DSH_PORT="${DSH_PORT}" DATA_DIR="${DATA_DIR}" DSH_HOME="${DSH_HOME}" \
+      APP_DIR="${APP_DIR}" CMD_MAIN="${CMD_DIR}/main" NODE_BIN="${NODE_BIN}" \
+      MANIFEST="$(dirname "${CMD_DIR}")/manifest" \
+      nohup "${DASH_NODE}" "${CMD_DIR}/dashboard.js" >> "${DASH_LOG}" 2>&1 &
+    echo $! > "${DASH_PID}"
+    log "dashboard started (pid $(cat "${DASH_PID}")) :0.0.0.0:${DASH_PORT}"
+}
+
 start() {
     mkdir -p "${DATA_DIR}" "${DSH_HOME}"
     find_dsh_bin
     start_dsh
     start_proxy
+    start_dashboard
     # 健康检查
     sleep 2
     if [ -f "${DSH_PID}" ] && kill -0 "$(cat "${DSH_PID}")" 2>/dev/null; then
@@ -340,7 +361,7 @@ start() {
 }
 
 stop() {
-    # 停 proxy 再停 dsh
+    # 停 proxy 再停 dsh (dashboard 保留: restart 场景下面板自身不被打断)
     if [ -f "${PROXY_PID}" ]; then
         kill "$(cat "${PROXY_PID}")" 2>/dev/null
         rm -f "${PROXY_PID}"

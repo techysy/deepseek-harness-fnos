@@ -24,6 +24,11 @@ fi
 # APP_VOL 由 APP_DIR 提取 (同卷), 不写死 /vol4
 
 # 只清理运行时日志与 pid, 保留 dsh_home 用户数据 (工作空间/会话/API Key/代理)
+# 先停管理面板 (main stop 不杀它, 卸载/重装场景必须显式停)
+if [ -f "${DATA_DIR}/dashboard.pid" ]; then
+    kill "$(cat "${DATA_DIR}/dashboard.pid")" 2>/dev/null
+fi
+pkill -f "cmd/dashboard.js" 2>/dev/null || true
 rm -f "${DATA_DIR}"/*.log "${DATA_DIR}"/*.pid 2>/dev/null || true
 
 # 保留 dsh_home (工作空间 profiles/storages + .env + proxy.conf)
