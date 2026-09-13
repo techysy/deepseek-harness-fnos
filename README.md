@@ -63,9 +63,16 @@ dsh 以 fnOS 应用（`dsh` 用户常驻服务）运行，web 服务绑 `0.0.0.0
 | **插件管理** | 第三方插件**禁用/启用/删除/安装**（profile bundles 开关，重启 dsh 生效）——插件不兼容导致启动崩溃循环时可在此快速禁用 |
 | **版本检查** | 上游 dsh npm latest 对比当前版本 + 本项目最新 Release 链接 |
 | **一键重启 dsh** | 面板自身不受重启影响 |
+| **📥 一键更新** | 检测到新版本后一键下载对应架构 fpk（Gitee 优先）到 NAS，再点「安装更新」自动完成安装+重启（需一次性 sudo 授权，见下） |
 
 - 零依赖（纯 node，随 fpk 内置），信任面与 dsh 一致：本机/局域网 IP + `fnos.net` + 自定义信任域可访问，其余来源 403
 - 日志落点：数据区 `dashboard.log`；升级/卸载由 uninstall_callback 统一清理
+- **启用热更新**（一次性，SSH 到 NAS 执行）：
+  ```bash
+  echo 'dsh ALL=(root) NOPASSWD: /usr/local/bin/appcenter-cli install-fpk /vol*/@appdata/dsh/dsh_home/update/*' | sudo tee /etc/sudoers.d/dsh-hotfix
+  sudo chmod 440 /etc/sudoers.d/dsh-hotfix
+  ```
+  授权后「安装更新」按钮生效；不授权则按钮会提示失败，走应用中心手动安装（下载的 fpk 在数据区 `dsh_home/update/`）
 - 旧版本 fpk 想用面板：把仓库 `cmd/dashboard.js` + 最新 `cmd/main` 拷到 `/var/apps/dsh/cmd/` 后重启 dsh 即可（注意转换 CRLF）
 
 ## 安装
