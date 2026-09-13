@@ -146,12 +146,15 @@ async function apiVersion() {
     const r = await httpGet(reg + "/latest", 6000);
     if (r.ok) { try { out.upstreamDsh = JSON.parse(r.body).version; break; } catch {} }
   }
+  // Release 探测 Gitee 优先 (国内可达性), 链接统一指向 GitHub Release
+  let tag = null;
   const g = await httpGet("https://gitee.com/api/v5/repos/techysy/deepseek-harness-fnos/releases/latest", 6000);
-  if (g.ok) { try { const d = JSON.parse(g.body); out.projectRelease = { tag: d.tag_name, name: d.name, url: d.html_url }; } catch {} }
-  if (!out.projectRelease) {
+  if (g.ok) { try { tag = JSON.parse(g.body).tag_name; } catch {} }
+  if (!tag) {
     const h = await httpGet("https://api.github.com/repos/techysy/deepseek-harness-fnos/releases/latest", 6000);
-    if (h.ok) { try { const d = JSON.parse(h.body); out.projectRelease = { tag: d.tag_name, name: d.name, url: d.html_url }; } catch {} }
+    if (h.ok) { try { tag = JSON.parse(h.body).tag_name; } catch {} }
   }
+  if (tag) out.projectRelease = { tag, url: "https://github.com/techysy/deepseek-harness-fnos/releases/tag/" + tag };
   return out;
 }
 function apiPlugins() {
@@ -259,12 +262,16 @@ function updateApply() {
 const HTML = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>dsh 管理面板</title>
+<title>dsh Admin Panel</title>
 <style>
-:root{--bg:#0f1419;--card:#1a2129;--bd:#2a3441;--tx:#d8dee6;--dim:#8a97a6;--ac:#4da3ff;--ok:#3fb950;--bad:#f85149;--warn:#d29922}
+:root{--bg:#0f1419;--card:#1a2129;--bd:#2a3441;--tx:#d8dee6;--dim:#8a97a6;--ac:#4da3ff;--ok:#3fb950;--bad:#f85149;--warn:#d29922;--pre:#0b0f14}
+body[data-theme="light"]{--bg:#f6f8fa;--card:#ffffff;--bd:#d0d7de;--tx:#1f2328;--dim:#656d76;--ac:#0969da;--ok:#1a7f37;--bad:#cf222e;--warn:#9a6700;--pre:#eef1f4}
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:var(--bg);color:var(--tx);font:14px/1.6 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;padding:20px;max-width:1100px;margin:0 auto}
+.top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
 h1{font-size:20px;margin-bottom:4px}h1 small{color:var(--dim);font-size:12px;font-weight:normal}
+.tools{display:flex;gap:6px}
+.tools button{background:var(--bd);color:var(--tx);border:none;border-radius:6px;padding:5px 10px;cursor:pointer;font-size:12px}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
 .card{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:14px 16px}
 .card h2{font-size:14px;color:var(--ac);margin-bottom:10px}
@@ -277,91 +284,110 @@ button.gray{background:var(--bd)}button.red{background:var(--bad)}button:disable
 table{width:100%;border-collapse:collapse;font-size:13px}
 td,th{padding:6px 4px;border-bottom:1px solid var(--bd);text-align:left}
 th{color:var(--dim);font-weight:normal}
-pre{background:#0b0f14;border:1px solid var(--bd);border-radius:8px;padding:10px;font:12px/1.5 Consolas,monospace;overflow:auto;max-height:420px;white-space:pre-wrap;word-break:break-all}
+pre{background:var(--pre);border:1px solid var(--bd);border-radius:8px;padding:10px;font:12px/1.5 Consolas,monospace;overflow:auto;max-height:420px;white-space:pre-wrap;word-break:break-all}
 .row{display:flex;gap:8px;align-items:center;margin:6px 0;flex-wrap:wrap}
-input,select{background:#0b0f14;color:var(--tx);border:1px solid var(--bd);border-radius:6px;padding:6px 8px;font-size:13px}
+input,select{background:var(--pre);color:var(--tx);border:1px solid var(--bd);border-radius:6px;padding:6px 8px;font-size:13px}
 .full{grid-column:1/-1}
 #toast{position:fixed;top:14px;right:14px;background:var(--card);border:1px solid var(--ac);border-radius:8px;padding:10px 16px;display:none}
 a{color:var(--ac)}
-</style></head><body>
-<h1>🛠️ dsh 管理面板 <small id="sub"></small></h1>
+</style></head><body data-theme="dark">
+<div class="top">
+  <h1>🛠️ <span data-i="title"></span> <small id="sub"></small></h1>
+  <div class="tools"><button id="themeBtn" onclick="toggleTheme()" data-t="theme">🌙</button><button id="langBtn" onclick="toggleLang()">EN</button></div>
+</div>
 <div class="grid">
-  <div class="card"><h2>服务状态</h2><div id="status">加载中…</div>
+  <div class="card"><h2 data-i="status"></h2><div id="status"><span class="dim">…</span></div>
     <div class="row" style="margin-top:10px">
-      <button onclick="restartDsh()">重启 dsh</button>
-      <button class="gray" onclick="loadAll()">刷新全部</button>
+      <button onclick="restartDsh()" data-i="restart"></button>
+      <button class="gray" onclick="loadAll()" data-i="refreshAll"></button>
     </div></div>
-  <div class="card"><h2>版本 / 更新</h2><div id="version">加载中…</div>
-    <div class="row" style="margin-top:10px"><button onclick="loadVersion()">检查更新</button><span id="verlink"></span></div></div>
-  <div class="card full"><h2>插件管理 <small style="color:var(--dim)">(profile: web · bundles 开关需重启 dsh 生效)</small></h2>
-    <div id="plugins">加载中…</div>
-    <div class="row"><input id="newpkg" placeholder="@scope/plugin-name 或 包名" style="flex:1">
-    <button onclick="addPlugin()">安装插件</button></div></div>
-  <div class="card full"><h2>日志</h2>
+  <div class="card"><h2 data-i="version"></h2><div id="version"><span class="dim">…</span></div>
+    <div class="row" style="margin-top:10px"><button onclick="loadVersion()" data-i="checkUpdate"></button><span id="verlink"></span></div></div>
+  <div class="card full"><h2><span data-i="plugins"></span> <small style="color:var(--dim)" data-i="pluginsHint"></small></h2>
+    <div id="plugins"><span class="dim">…</span></div>
+    <div class="row"><input id="newpkg" style="flex:1">
+    <button onclick="addPlugin()" data-i="installPlugin"></button></div></div>
+  <div class="card full"><h2 data-i="logs"></h2>
     <div class="row">
-      <select id="logfile"><option value="app">app.log(生命周期)</option><option value="dsh">dsh.log(dsh 输出)</option><option value="dashboard">dashboard.log(本面板)</option></select>
+      <select id="logfile"><option value="app" data-i="logApp"></option><option value="dsh" data-i="logDsh"></option><option value="dashboard" data-i="logPanel"></option></select>
       <select id="lines"><option>100</option><option selected>300</option><option>800</option></select>
-      <label><input type="checkbox" id="auto" onchange="autoLogs()">自动刷新(5s)</label>
-      <button class="gray" onclick="loadLogs()">刷新</button>
+      <label><input type="checkbox" id="auto" onchange="autoLogs()"><span data-i="autoRefresh"></span></label>
+      <button class="gray" onclick="loadLogs()" data-i="refresh"></button>
     </div>
-    <pre id="logview">加载中…</pre></div>
+    <pre id="logview"><span class="dim">…</span></pre></div>
 </div>
 <div id="toast"></div>
 <script>
 const $=id=>document.getElementById(id);
-function toast(m,bad){const t=$('toast');t.textContent=m;t.style.borderColor=bad?'var(--bad)':'var(--ac)';t.style.display='block';setTimeout(()=>t.style.display='none',2600)}
-async function api(p,opt){try{const r=await fetch(p,opt);if(r.status===403){toast('被信任围栏拒绝 (403)',1);return null}return await r.json()}catch(e){toast('请求失败: '+e.message,1);return null}}
-async function loadStatus(){const d=await api('/api/status');if(!d)return;$('sub').textContent='fpk '+d.fpkVersion+' · 数据区 '+d.dataDir;
-$('status').innerHTML=
-kv('dsh web', d.dsh.running?('<span class=ok>运行中 pid '+d.dsh.pid+'</span>'+(d.dsh.uptime?' ('+d.dsh.uptime+')':'')):'<span class=bad>未运行</span>')+
-kv('健康检查 (:'+d.dsh.port+')', d.dsh.health==='OK'?'<span class=ok>OK</span>':'<span class=bad>'+d.dsh.health+'</span>')+
-kv('proxy 网关', d.proxy.running?'<span class=ok>运行中</span>':'<span class=bad>未运行</span>')+
-kv('上游 dsh 版本', d.dshPkgVersion)}
-function kv(k,v){return '<div class="kv"><b>'+k+'</b><span>'+v+'</span></div>'}
-async function loadVersion(){const d=await api('/api/version');if(!d)return;
-let up='';
-if(d.upstreamDsh) up=(d.upstreamDsh===d.dshInstalled)?'<span class=ok>已是最新</span>':'<span class=warn>有新版 '+d.upstreamDsh+' (当前 '+d.dshInstalled+')</span>';else up='<span class=dim>探测失败</span>';
-let pr=d.projectRelease?(' <a href="'+d.projectRelease.url+'" target="_blank">'+d.projectRelease.tag+'</a>'):'';
-let hot='';
-try{const st=await api('/api/update/state');
-if(st&&st.files&&st.files.length){hot+='<div class=row style="margin-top:8px"><span class=ok>📥 已下载: '+st.files.join(' , ')+'</span></div><div class=row><button onclick=applyUpdate()>安装更新 (appcenter-cli)</button><span style="color:var(--dim)">若失败, 先在 NAS 授权一次性 sudo:</span></div><pre style="max-height:100px">'+(st.sudoHint||'')+'</pre></div>';}
+const I18N={
+zh:{title:"dsh 管理面板",status:"服务状态",version:"版本 / 更新",plugins:"插件管理",pluginsHint:"(profile: web · bundles 开关需重启 dsh 生效)",logs:"日志",restart:"重启 dsh",refreshAll:"刷新全部",refresh:"刷新",loading:"加载中…",running:"运行中",notRunning:"未运行",health:"健康检查",proxy:"proxy 网关",upstreamVer:"上游 dsh 版本",fpkVer:"fpk 版本",npmLatest:"上游 dsh (npm latest)",projectRel:"本项目最新 Release",checkUpdate:"检查更新",plugin:"插件",ver:"版本",statusTh:"状态",actions:"操作",enabled:"启用",disabled:"禁用",noPlugins:"未安装第三方插件",coreBundles:"核心 bundles: ",installPlugin:"安装插件",newpkgPh:"@scope/plugin-name 或 包名",logApp:"app.log(生命周期)",logDsh:"dsh.log(dsh 输出)",logPanel:"dashboard.log(本面板)",autoRefresh:"自动刷新(5s)",emptyLog:"(空)",isLatest:"已是最新",hasNewPre:"有新版 ",hasNewMid:" (当前 ",detectFail:"探测失败",downloaded:"📥 已下载: ",installUpdate:"安装更新 (appcenter-cli)",sudoHint:"若失败, 先在 NAS 授权一次性 sudo:",hotDownload:"📥 一键下载到 NAS",hotHint:"下载对应架构 fpk (Gitee 优先)",downloading:"下载中… (约 50MB, 请稍候)",updateWays:"更新方式: ① 面板一键下载 → 安装更新 (需一次性 sudo 授权) ② 下载 Release fpk → 应用中心手动安装 (数据区保留)",restartConfirm:"重启 dsh? (面板会短暂离线, 30s 内自动恢复)",restartSent:"重启指令已发送…",restartDone:"重启完成",restartTimeout:"重启超时, 请刷新页面检查",fence403:"被信任围栏拒绝 (403)",reqFail:"请求失败: ",opFail:"操作失败",enableQ:"启用",disableQ:"禁用",qTail:"? (需重启 dsh 生效)",removeQ1:"删除插件 ",removeQ2:"? (从 bundles 移除 + pnpm remove)",enableDone:"已启用, 重启 dsh 生效",disableDone:"已禁用, 重启 dsh 生效",removeDone:"已删除",removeDonePnpm:"已删除 (pnpm remove 完成)",removeDoneNo:"已删除 (pnpm 不可用, 仅移出 bundles)",removeFail:"删除失败",addDone:"已安装并启用, 重启 dsh 生效",addFail:"安装失败: ",applyConfirm:"使用 appcenter-cli 安装更新? (会自动重启 dsh, 面板短暂离线)",applySent:"安装指令已下发, App Center 安装中… 约 1 分钟后刷新页面",applyFail:"安装失败: 可能未授权 sudo",hotDone:"已下载 (",dataDirLabel:"数据区"},
+en:{title:"dsh Admin Panel",status:"Service Status",version:"Version / Update",plugins:"Plugin Management",pluginsHint:"(profile: web · bundle toggles take effect after dsh restart)",logs:"Logs",restart:"Restart dsh",refreshAll:"Refresh all",refresh:"Refresh",loading:"Loading…",running:"Running",notRunning:"Not running",health:"Health check",proxy:"proxy gateway",upstreamVer:"Upstream dsh version",fpkVer:"fpk version",npmLatest:"Upstream dsh (npm latest)",projectRel:"Latest project Release",checkUpdate:"Check update",plugin:"Plugin",ver:"Version",statusTh:"Status",actions:"Actions",enabled:"Enabled",disabled:"Disabled",noPlugins:"No third-party plugins installed",coreBundles:"Core bundles: ",installPlugin:"Install plugin",newpkgPh:"@scope/plugin-name or package name",logApp:"app.log (lifecycle)",logDsh:"dsh.log (dsh output)",logPanel:"dashboard.log (panel)",autoRefresh:"Auto refresh (5s)",emptyLog:"(empty)",isLatest:"Up to date",hasNewPre:"New version available: ",hasNewMid:" (current ",detectFail:"Not detected",downloaded:"📥 Downloaded: ",installUpdate:"Install update (appcenter-cli)",sudoHint:"If it fails, grant one-time sudo on the NAS first:",hotDownload:"📥 Download to NAS",hotHint:"Download arch-matched fpk (Gitee first)",downloading:"Downloading… (~50MB, please wait)",updateWays:"Update paths: ① panel download → Install update (one-time sudo grant needed) ② download Release fpk → App Center manual install (data preserved)",restartConfirm:"Restart dsh? (panel briefly offline, auto-recovers within 30s)",restartSent:"Restart command sent…",restartDone:"Restart complete",restartTimeout:"Restart timed out, please refresh",fence403:"Blocked by trust fence (403)",reqFail:"Request failed: ",opFail:"Operation failed",enableQ:"Enable",disableQ:"Disable",qTail:"? (takes effect after dsh restart)",removeQ1:"Delete plugin ",removeQ2:"? (removes from bundles + pnpm remove)",enableDone:"Enabled, takes effect after dsh restart",disableDone:"Disabled, takes effect after dsh restart",removeDone:"Deleted",removeDonePnpm:"Deleted (pnpm remove done)",removeDoneNo:"Deleted (pnpm unavailable, removed from bundles only)",removeFail:"Delete failed",addDone:"Installed & enabled, takes effect after dsh restart",addFail:"Install failed: ",applyConfirm:"Install update via appcenter-cli? (dsh auto-restarts, panel briefly offline)",applySent:"Install dispatched, App Center installing… refresh in ~1 min",applyFail:"Install failed: sudo not granted?",hotDone:"Downloaded (",dataDirLabel:"data dir"}
+};
+let LANG=localStorage.getItem("dsh-lang")||((navigator.language||"").toLowerCase().indexOf("zh")===0?"zh":"en");
+function t(k){const d=I18N[LANG]||I18N.zh;return d[k]!==undefined?d[k]:(I18N.zh[k]!==undefined?I18N.zh[k]:k)}
+function applyStaticLang(){document.documentElement.lang=LANG==="zh"?"zh-CN":"en";document.title=t("title");
+document.querySelectorAll("[data-i]").forEach(e=>e.textContent=t(e.dataset.i));
+document.querySelectorAll("[data-ip]").forEach(e=>e.placeholder=t(e.dataset.ip));
+$("langBtn").textContent=LANG==="zh"?"EN":"中文"}
+function toggleLang(){LANG=LANG==="zh"?"en":"zh";localStorage.setItem("dsh-lang",LANG);applyStaticLang();loadAll()}
+let THEME=localStorage.getItem("dsh-theme")||(window.matchMedia&&matchMedia("(prefers-color-scheme: light)").matches?"light":"dark");
+function applyTheme(){document.body.dataset.theme=THEME;$("themeBtn").textContent=THEME==="dark"?"🌙":"☀️"}
+function toggleTheme(){THEME=THEME==="dark"?"light":"dark";localStorage.setItem("dsh-theme",THEME);applyTheme()}
+function toast(m,bad){const t2=$("toast");t2.textContent=m;t2.style.borderColor=bad?"var(--bad)":"var(--ac)";t2.style.display="block";setTimeout(()=>t2.style.display="none",2600)}
+async function api(p,opt){try{const r=await fetch(p,opt);if(r.status===403){toast(t("fence403"),1);return null}return await r.json()}catch(e){toast(t("reqFail")+e.message,1);return null}}
+function kv(k,v){return '<div class="kv"><b>'+k+"</b><span>"+v+"</span></div>"}
+async function loadStatus(){const d=await api("/api/status");if(!d)return;$("sub").textContent="fpk "+d.fpkVersion+" · "+t("dataDirLabel")+" "+d.dataDir;
+$("status").innerHTML=
+kv("dsh web", d.dsh.running?('<span class=ok>'+t("running")+" pid "+d.dsh.pid+"</span>"+(d.dsh.uptime?" ("+d.dsh.uptime+")":"")):('<span class=bad>'+t("notRunning")+"</span>"))+
+kv(t("health")+" (:"+d.dsh.port+")", d.dsh.health==="OK"?'<span class=ok>OK</span>':'<span class=bad>'+d.dsh.health+"</span>")+
+kv(t("proxy"), d.proxy.running?'<span class=ok>'+t("running")+"</span>":('<span class=bad>'+t("notRunning")+"</span>"))+
+kv(t("upstreamVer"), d.dshPkgVersion)}
+async function loadVersion(){const d=await api("/api/version");if(!d)return;
+let up="";
+if(d.upstreamDsh) up=(d.upstreamDsh===d.dshInstalled)?('<span class=ok>'+t("isLatest")+"</span>"):('<span class=warn>'+t("hasNewPre")+d.upstreamDsh+t("hasNewMid")+d.dshInstalled+")</span>");else up='<span class=dim>'+t("detectFail")+"</span>";
+let pr=d.projectRelease?('<a href="'+d.projectRelease.url+'" target="_blank">'+d.projectRelease.tag+"</a>"):'<span class=dim>'+t("detectFail")+"</span>";
+let hot="";
+try{const st=await api("/api/update/state");
+if(st&&st.files&&st.files.length){hot+='<div class=row style="margin-top:8px"><span class=ok>'+t("downloaded")+st.files.join(" , ")+"</span></div><div class=row><button onclick=applyUpdate()>"+t("installUpdate")+'</button><span style="color:var(--dim)">'+t("sudoHint")+'</span></div><pre style="max-height:100px">'+(st.sudoHint||"")+"</pre></div>";}
 }catch(e){}
-$('version').innerHTML=kv('fpk 版本',d.fpk)+kv('上游 dsh (npm latest)',up)+kv('本项目最新 Release',pr||'<span class=dim>探测失败</span>')+
-'<div class=row style="margin-top:8px"><button onclick="hotUpdate()">📥 一键下载到 NAS</button><span id=hotstat style="color:var(--dim)">下载对应架构 fpk (Gitee 优先)</span></div>'+hot+
-'<div class=row style="color:var(--dim)">更新方式: ① 面板一键下载 → 安装更新 (需一次性 sudo 授权) ② 下载 Release fpk → 应用中心手动安装 (数据区保留)</div>'}
-async function hotUpdate(){$('hotstat').textContent='下载中… (约 50MB, 请稍候)';const b=event.target;b.disabled=true;
-const d=await api('/api/update/download',{method:'POST'});b.disabled=false;
-if(d&&d.ok){$('hotstat').innerHTML='<span class=ok>已下载 ('+Math.round(d.size/1048576)+'MB): '+d.file.split('/').pop()+'</span>';loadVersion();}
-else{$('hotstat').innerHTML='<span class=bad>'+(d&&d.err||'失败')+'</span>'}}
-async function applyUpdate(){if(!confirm('使用 appcenter-cli 安装更新? (会自动重启 dsh, 面板短暂离线)'))return;
-const d=await api('/api/update/apply',{method:'POST'});
-if(d&&d.ok){toast('安装指令已下发, App Center 安装中… 约 1 分钟后刷新页面');setTimeout(()=>location.reload(),60000)}
-else toast('安装失败: '+(d&&d.err||'可能未授权 sudo'),1)}
-async function loadPlugins(){const d=await api('/api/plugins');if(!d)return;
-let h='<table><tr><th>插件</th><th>版本</th><th>状态</th><th>操作</th></tr>';
-if(!d.plugins.length)h+='<tr><td colspan=4 style="color:var(--dim)">未安装第三方插件</td></tr>';
-for(const p of d.plugins){h+='<tr><td>'+p.name+'</td><td>'+p.version+'</td><td>'+(p.enabled?'<span class=ok>启用</span>':'<span class=warn>禁用</span>')+
-'</td><td>'+(p.enabled?'<button class=gray onclick=\\'plug("'+p.name+'",false)\\'>禁用</button>':'<button onclick=\\'plug("'+p.name+'",true)\\'>启用</button>')+
-' <button class=red onclick=\\'plugRemove("'+p.name+'")\\'>删除</button></td></tr>'}
-h+='</table><div style="color:var(--dim);margin-top:6px">核心 bundles: '+d.coreBundles.join(' , ')+'</div>';
-$('plugins').innerHTML=h}
-async function plug(name,enable){if(!confirm((enable?'启用':'禁用')+' '+name+'? (需重启 dsh 生效)'))return;
-const d=await api('/api/plugins/toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,enable})});
-d&&d.ok?(toast('已'+(enable?'启用':'禁用')+', 重启 dsh 生效'),loadPlugins()):toast('操作失败',1)}
-async function plugRemove(name){if(!confirm('删除插件 '+name+'? (从 bundles 移除 + pnpm remove)'))return;
-const d=await api('/api/plugins/remove',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});
-d&&d.ok?(toast('已删除'+(d.pnpm?' (pnpm remove 完成)':' (pnpm 不可用, 仅移出 bundles)')),loadPlugins()):toast('删除失败',1)}
-async function addPlugin(){const n=$('newpkg').value.trim();if(!n)return;
-const d=await api('/api/plugins/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:n})});
-d&&d.ok?(toast('已安装并启用, 重启 dsh 生效'),$('newpkg').value='',loadPlugins()):toast('安装失败: '+(d&&d.err||''),1)}
-async function restartDsh(){if(!confirm('重启 dsh? (面板会短暂离线, 30s 内自动恢复)'))return;
-toast('重启指令已发送…');try{await fetch('/api/dsh/restart',{method:'POST'})}catch(e){}
-for(let i=0;i<15;i++){await new Promise(r=>setTimeout(r,2000));try{const d=await api('/api/status');if(d&&d.dsh.health==='OK'){toast('重启完成');loadAll();return}}catch(e){}}
-toast('重启超时, 请刷新页面检查',1)}
-async function loadLogs(){const f=$('logfile').value,n=$('lines').value;const d=await api('/api/logs?file='+f+'&lines='+n);if(d&&d.ok)$('logview').textContent=d.text||'(空)'}
-let timer=null;function autoLogs(){clearInterval(timer);if($('auto').checked)timer=setInterval(loadLogs,5000)}
+$("version").innerHTML=kv(t("fpkVer"),d.fpk)+kv(t("npmLatest"),up)+kv(t("projectRel"),pr)+
+'<div class=row style="margin-top:8px"><button onclick="hotUpdate()">'+t("hotDownload")+'</button><span id=hotstat style="color:var(--dim)">'+t("hotHint")+"</span></div>"+hot+
+'<div class=row style="color:var(--dim)">'+t("updateWays")+"</div>"}
+async function hotUpdate(){$("hotstat").textContent=t("downloading");const b=event.target;b.disabled=true;
+const d=await api("/api/update/download",{method:"POST"});b.disabled=false;
+if(d&&d.ok){$("hotstat").innerHTML='<span class=ok>'+t("hotDone")+Math.round(d.size/1048576)+"MB): "+d.file.split("/").pop()+"</span>";loadVersion();}
+else{$("hotstat").innerHTML='<span class=bad>'+((d&&d.err)||t("opFail"))+"</span>"}}
+async function applyUpdate(){if(!confirm(t("applyConfirm")))return;
+const d=await api("/api/update/apply",{method:"POST"});
+if(d&&d.ok){toast(t("applySent"));setTimeout(()=>location.reload(),60000)}
+else toast(t("applyFail"),1)}
+async function loadPlugins(){const d=await api("/api/plugins");if(!d)return;
+let h='<table><tr><th>'+t("plugin")+"</th><th>"+t("ver")+"</th><th>"+t("statusTh")+"</th><th>"+t("actions")+"</th></tr>";
+if(!d.plugins.length)h+='<tr><td colspan=4 style="color:var(--dim)">'+t("noPlugins")+"</td></tr>";
+for(const p of d.plugins){h+='<tr><td>'+p.name+"</td><td>"+p.version+"</td><td>"+(p.enabled?'<span class=ok>'+t("enabled")+"</span>":('<span class=warn>'+t("disabled")+"</span>"))+
+"</td><td>"+(p.enabled?'<button class=gray data-act="dis" data-name="'+p.name+'">'+t("disableQ")+"</button>":('<button data-act="en" data-name="'+p.name+'">'+t("enableQ")+"</button>"))+
+' <button class=red data-act="rm" data-name="'+p.name+'">✕</button></td></tr>'}
+h+="</table>"+'<div style="color:var(--dim);margin-top:6px">'+t("coreBundles")+d.coreBundles.join(" , ")+"</div>";
+$("plugins").innerHTML=h}
+document.addEventListener("click",e=>{const b=e.target.closest("[data-act]");if(!b)return;const n=b.dataset.name,a=b.dataset.act;
+if(a==="dis")plug(n,false);else if(a==="en")plug(n,true);else if(a==="rm")plugRemove(n)});
+async function plug(name,enable){if(!confirm((enable?t("enableQ"):t("disableQ"))+" "+name+t("qTail")))return;
+const d=await api("/api/plugins/toggle",{method:"POST",headers:{'Content-Type':'application/json'},body:JSON.stringify({name,enable})});
+d&&d.ok?(toast(enable?t("enableDone"):t("disableDone")),loadPlugins()):toast(t("opFail"),1)}
+async function plugRemove(name){if(!confirm(t("removeQ1")+name+t("removeQ2")))return;
+const d=await api("/api/plugins/remove",{method:"POST",headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});
+d&&d.ok?(toast(d.pnpm?t("removeDonePnpm"):t("removeDoneNo")),loadPlugins()):toast(t("removeFail"),1)}
+async function addPlugin(){const n=$("newpkg").value.trim();if(!n)return;
+const d=await api("/api/plugins/add",{method:"POST",headers:{'Content-Type':'application/json'},body:JSON.stringify({name:n})});
+d&&d.ok?(toast(t("addDone")),$("newpkg").value="",loadPlugins()):toast(t("addFail")+(d&&d.err||""),1)}
+async function restartDsh(){if(!confirm(t("restartConfirm")))return;
+toast(t("restartSent"));try{await fetch("/api/dsh/restart",{method:"POST"})}catch(e){}
+for(let i=0;i<15;i++){await new Promise(r=>setTimeout(r,2000));try{const d=await api("/api/status");if(d&&d.dsh.health==="OK"){toast(t("restartDone"));loadAll();return}}catch(e){}}
+toast(t("restartTimeout"),1)}
+async function loadLogs(){const f=$("logfile").value,n=$("lines").value;const d=await api("/api/logs?file="+f+"&lines="+n);if(d&&d.ok)$("logview").textContent=d.text||t("emptyLog")}
+let timer=null;function autoLogs(){clearInterval(timer);if($("auto").checked)timer=setInterval(loadLogs,5000)}
 function loadAll(){loadStatus();loadVersion();loadPlugins();loadLogs()}
-loadAll();
+applyTheme();applyStaticLang();loadAll();
 </script></body></html>`;
 
 // ---- 路由 ----
