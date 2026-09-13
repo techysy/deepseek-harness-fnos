@@ -1,5 +1,23 @@
 # CHANGELOG
 
+## 0.1.5-rc.2 (2026-09-12)
+
+> 升级上游 `@deepseek-ai/dsh` 到 0.1.5-rc.2（npm `next` 标签；rc.1→rc.2 为小幅体验优化）。**本版起新装机自动安装/启用 nodejs_v24 + bunjs**（恢复被误删的 `install_dep_apps` 声明），并内置 28001 管理面板。
+
+### fpk 新增（本地）
+- **28001 管理面板**（`cmd/dashboard.js`，零依赖 node）：服务状态 / dsh 日志查看（app/dsh/dashboard 三通道 tail+自动刷新）/ 插件管理（profile bundles 禁用/启用/删除/安装）/ 版本检查（上游 npm latest + 本项目 Release）/ 一键重启 dsh。信任面与 dsh 一致（回环/本机 IP/fnos.net/trusted_hosts.conf，围栏外 403）。访问 `http://NAS_IP:28001/`
+- **恢复 `install_dep_apps = nodejs_v24:bunjs`**（3937309 误删，8/22–9/11 的包新装机不自动装 node；4a7ce62 恢复）
+- 补丁加固：browser-auth/privileged-fence 补丁 python3 不可用时 **node 兜底**（朋友环境实证），结果落 app.log 可远程诊断
+- 新增 `scripts/fix-browser-auth-401.sh`：401 现场热修脚本（Gitee raw 一条命令）
+
+### 上游变更（rc.1 → rc.2）
+- 反馈提交体验：点赞/点踩弹窗确认，失败保留已填内容
+- 交付文件卡片排版与对话间距优化，代码文件图标更新
+
+### 打包链路防护（两条路径）
+- CI：manifest 必需字段硬校验（install_dep_apps / appname=dsh / version）
+- NAS 脚本：fnpack 版本守卫（1.2.4 拒预发布版本号自动切 1.2.1）+ 自动删构建目录 lock
+
 ## 0.1.5-rc.1 (2026-09-10)
 
 > 升级上游 `@deepseek-ai/dsh` 到 0.1.5-rc.1（npm `latest`，跨 0.1.3/0.1.4 两系列的汇总 rc）。打包方式不变：CI 在线构建（x86 + ARM）+ 补丁注入。fpk 版本号跟随上游、本地修复不抬版。
