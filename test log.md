@@ -2,6 +2,33 @@
 
 > 记录开发/测试迭代的历史更新详情。正式功能点聚合见 `CHANGELOG.md`。
 
+## 0.1.5-rc.2 (2026-09-13)
+
+> 升级上游 `@deepseek-ai/dsh` 到 0.1.5-rc.2（npm `next`，rc.1→rc.2 小幅体验优化）。本版起 fpk 内置 28001 管理面板 + install_dep_apps 恢复 + 补丁 node 兜底（三者为首次进入发布包）。
+
+### 测试报告
+
+**安装方式**：NAS 101 手动构建（`build-x86-offline.sh`，fnpack 1.2.1 PATH 前置），交付 `X:pk\dsh`；CI 双架构同步构建（run 34773759999/34773766008，**manifest 必需字段硬校验首次生效**：`install_dep_apps = nodejs_v24:bunjs` ✓ `patched: 1` ✓）
+
+**验证项**：
+
+| 检查项 | 结果 |
+|--------|------|
+| manifest | ✅ version=0.1.5-rc.2 + install_dep_apps 声明在包内 |
+| 管理面板 | ✅ `dashboard started :0.0.0.0:28001`，`/api/status`（dsh web 健康/pid/时长）、`/api/plugins`（正确列出 @liustack/modlens 启用态 + 核心 bundles）、`/api/logs` 三通道 tail、`/api/version`（上游 npm latest + Gitee Release 探测）全部正常 |
+| 面板信任围栏 | ✅ 本机/LAN 200，伪造 Host 403 |
+| 面板重启联动 | ✅ main stop() 不杀面板；面板"重启 dsh"经 main restart |
+| 升级链路 | ✅ rc.1 升级 rc.2 覆盖安装，dsh_home 数据保留，面板 pid 文件独立 |
+| 卸载清理 | ✅ uninstall_callback 显式停面板（stop 不杀，卸载时必须杀） |
+
+**过程坑（已修复入库）**：
+1. Windows checkout 的 CRLF 使 scp 过去的 cmd/main 在 NAS 报 `$'': command not found`——部署脚本需 `sed -i 's/$//'`（正式 fpk 内的 cmd/main 由 NAS git 构建产出，无此问题）
+2. dashboard.js 用 http.get 请求 https URL 静默失败 → 改 https 模块（69e727d）
+3. NAS 构建目录「删 lock 后下次 pull 必冲突」→ 脚本改 fetch+reset --hard（4faf9ab）
+4. fnpack 1.2.4 拒预发布版本号 → 1.2.1 PATH 前置（已固化进脚本）
+
+---
+
 ## 0.1.5-rc.1 (2026-09-10)
 
 > 升级上游 `@deepseek-ai/dsh` 到 0.1.5-rc.1（npm `latest`，跨 0.1.3/0.1.4 汇总 rc）。CI 双架构在线打包（x86 106MB / ARM 99MB artifacts），fpk 版本跟随上游。
