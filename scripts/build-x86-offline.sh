@@ -59,9 +59,10 @@ fi
 echo "==> 更新 fpk 源码..."
 mkdir -p "${BUILD_ROOT}"
 if [ -d "${SRC_DIR}/.git" ]; then
-  git -C "${SRC_DIR}" fetch --tags --force
+  # 专用构建目录: 本地修改 (脚本删过的 lock 等) 一律丢弃, 避免 pull 冲突
+  git -C "${SRC_DIR}" fetch origin main
   git -C "${SRC_DIR}" checkout main
-  git -C "${SRC_DIR}" pull --ff-only
+  git -C "${SRC_DIR}" reset --hard origin/main
 else
   git clone --depth 1 "${REPO_URL}" "${SRC_DIR}"
 fi
