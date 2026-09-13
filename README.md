@@ -50,6 +50,24 @@ dsh 以 fnOS 应用（`dsh` 用户常驻服务）运行，web 服务绑 `0.0.0.0
 
 > 📖 围栏与回环限制详解：[docs/dsh-loopback-restriction.md](docs/dsh-loopback-restriction.md) · [docs/dsh-access-and-gateway.md](docs/dsh-access-and-gateway.md)
 
+## 🛠️ 管理面板（28001）
+
+0.1.5-rc.2 起内置独立管理面板，随 dsh 自动启动，浏览器打开：
+
+> **`http://<NAS_IP>:28001/`**
+
+| 功能 | 说明 |
+|------|------|
+| **服务状态** | dsh web 进程/健康检查/运行时长、网关代理、当前版本 |
+| **日志查看** | app.log（生命周期）/ dsh.log（dsh 输出）/ 面板日志，tail 尾部 + 5s 自动刷新 |
+| **插件管理** | 第三方插件**禁用/启用/删除/安装**（profile bundles 开关，重启 dsh 生效）——插件不兼容导致启动崩溃循环时可在此快速禁用 |
+| **版本检查** | 上游 dsh npm latest 对比当前版本 + 本项目最新 Release 链接 |
+| **一键重启 dsh** | 面板自身不受重启影响 |
+
+- 零依赖（纯 node，随 fpk 内置），信任面与 dsh 一致：本机/局域网 IP + `fnos.net` + 自定义信任域可访问，其余来源 403
+- 日志落点：数据区 `dashboard.log`；升级/卸载由 uninstall_callback 统一清理
+- 旧版本 fpk 想用面板：把仓库 `cmd/dashboard.js` + 最新 `cmd/main` 拷到 `/var/apps/dsh/cmd/` 后重启 dsh 即可（注意转换 CRLF）
+
 ## 安装
 
 1. App Center **手动安装**选下载的 fpk（推荐 iframe 版）
