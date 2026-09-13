@@ -32,8 +32,10 @@ const DSH_PORT = process.env.DSH_PORT || "28000";
 const DASH_PORT = process.env.DASH_PORT || "28001";
 const CMD_MAIN = process.env.CMD_MAIN || path.join(APP_DIR, "cmd", "main");
 const MANIFEST = process.env.MANIFEST || path.join(APP_DIR, "manifest");
+const UPDATE_DIR = DSH_HOME ? path.join(DSH_HOME, "update") : null;
 const PROFILE = () => path.join(DSH_HOME, "profiles", "web");
 const PKG_JSON = () => path.join(PROFILE(), "package.json");
+const ARCH = process.arch === "arm64" ? "arm" : "x86";
 const NODE_BIN = process.env.NODE_BIN || path.join("/var/apps/nodejs_v24/target/bin", "node");
 
 // ---- 信任围栏: 与 dsh/cmd/main 同一信任面 ----
@@ -186,6 +188,73 @@ function restartDsh() {
   child.unref();
 }
 
+// ---- 更新下载 / 热安装 ----
+function downloadToFile(url, dest, depth = 0) {
+  // 返回 Promise<size>; 处理 30x 跳转 (Gitee 附件 → raw CDN), https/http 自适应
+  return new Promise((resolve, reject) => {
+    if (depth > 5) return reject(new Error("too many redirects"));
+    const mod = url.startsWith("https:") ? https : http;
+    const req = mod.get(url, { timeout: 30000, headers: { "User-Agent": "dsh-dashboard" } }, res => {
+      if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location)
+        return res.resume(), downloadToFile(res.headers.location, dest, depth + 1).then(resolve, reject);
+      if (res.statusCode !== 200) return res.resume(), reject(new Error("HTTP " + res.statusCode));
+      const out = fs.createWriteStream(dest);
+      res.pipe(out);
+      out.on("finish", () => out.close(() => resolve(fs.statSync(dest).size)));
+      out.on("error", reject);
+    });
+    req.on("timeout", () => { req.destroy(); reject(new Error("timeout")); });
+    req.on("error", reject);
+  });
+}
+async function fetchLatestRelease() {
+  for (const u of ["https://gitee.com/api/v5/repos/techysy/deepseek-harness-fnos/releases/latest",
+                   "https://api.github.com/repos/techysy/deepseek-harness-fnos/releases/latest"]) {
+    const r = await httpGet(u, 8000);
+    if (r.ok && r.status === 200) { try { const d = JSON.parse(r.body); if (d.tag_name) return d; } catch {} }
+  }
+  return null;
+}
+function assetFor(release, arch, variant) {
+  const list = (release.assets || []).map(a => ({ name: a.name, url: a.browser_download_url || a.path || "" }));
+  // Gitee assets: browser_download_url; 无则拼 raw 下载 (attachments 需登录, 用 release 页面下载链接兜底)
+  return list.find(a => a.name.includes(arch) && a.name.includes(variant) && a.name.endsWith(".fpk") && !a.name.includes("tar.gz"))
+      || list.find(a => a.name.includes(arch) && a.name.endsWith(".fpk"));
+}
+let updateBusy = false;
+async function updateDownload() {
+  if (updateBusy) return { ok: false, err: "已有下载在进行" };
+  const rel = await fetchLatestRelease();
+  if (!rel) return { ok: false, err: "无法获取最新 Release (Gitee/GitHub 均不可达)" };
+  const cur = manifestField("version");
+  const tag = (rel.tag_name || "").replace(/^v/, "");
+  const asset = assetFor(rel, ARCH, "iframe") || assetFor(rel, ARCH, "");
+  if (!asset || !asset.url) return { ok: false, err: "Release 中未找到 " + ARCH + " 架构的 fpk 资产" };
+  if (tag === cur && !rel.prerelease) return { ok: false, err: "当前已是最新版本 " + cur, same: true };
+  updateBusy = true;
+  try {
+    fs.mkdirSync(UPDATE_DIR, { recursive: true });
+    // 清理旧下载
+    for (const f of fs.readdirSync(UPDATE_DIR)) if (f.endsWith(".fpk") || f.endsWith(".part")) fs.unlinkSync(path.join(UPDATE_DIR, f));
+    const dest = path.join(UPDATE_DIR, asset.name);
+    const size = await downloadToFile(asset.url, dest);
+    return { ok: true, file: dest, size, tag: rel.tag_name };
+  } catch (e) {
+    return { ok: false, err: "下载失败: " + (e.message || e) };
+  } finally { updateBusy = false; }
+}
+function updateApply() {
+  // sudo -n: 未授权时立即失败 (不挂起), 返回一次性授权命令
+  const files = fs.existsSync(UPDATE_DIR) ? fs.readdirSync(UPDATE_DIR).filter(f => f.endsWith(".fpk")) : [];
+  if (!files.length) return { ok: false, err: "update 目录没有已下载的 fpk" };
+  const file = path.join(UPDATE_DIR, files.sort().pop());
+  const log = fs.openSync(path.join(DATA_DIR, "dashboard.log"), "a");
+  const child = spawn("sudo", ["-n", "/usr/local/bin/appcenter-cli", "install-fpk", file], { detached: true, stdio: ["ignore", log, log] });
+  child.on("error", () => {});
+  child.unref();
+  return { ok: true, dispatched: true, file };
+}
+
 // ---- HTML (单页, 无外部依赖) ----
 const HTML = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="utf-8">
@@ -253,8 +322,21 @@ async function loadVersion(){const d=await api('/api/version');if(!d)return;
 let up='';
 if(d.upstreamDsh) up=(d.upstreamDsh===d.dshInstalled)?'<span class=ok>已是最新</span>':'<span class=warn>有新版 '+d.upstreamDsh+' (当前 '+d.dshInstalled+')</span>';else up='<span class=dim>探测失败</span>';
 let pr=d.projectRelease?(' <a href="'+d.projectRelease.url+'" target="_blank">'+d.projectRelease.tag+'</a>'):'';
+let hot='';
+try{const st=await api('/api/update/state');
+if(st&&st.files&&st.files.length){hot+='<div class=row style="margin-top:8px"><span class=ok>📥 已下载: '+st.files.join(' , ')+'</span></div><div class=row><button onclick=applyUpdate()>安装更新 (appcenter-cli)</button><span style="color:var(--dim)">若失败, 先在 NAS 授权一次性 sudo:</span></div><pre style="max-height:100px">'+(st.sudoHint||'')+'</pre></div>';}
+}catch(e){}
 $('version').innerHTML=kv('fpk 版本',d.fpk)+kv('上游 dsh (npm latest)',up)+kv('本项目最新 Release',pr||'<span class=dim>探测失败</span>')+
-'<div class=row style="color:var(--dim)">更新方式: 下载 Release 页 fpk → 应用中心手动安装 (数据区保留)</div>'}
+'<div class=row style="margin-top:8px"><button onclick="hotUpdate()">📥 一键下载到 NAS</button><span id=hotstat style="color:var(--dim)">下载对应架构 fpk (Gitee 优先)</span></div>'+hot+
+'<div class=row style="color:var(--dim)">更新方式: ① 面板一键下载 → 安装更新 (需一次性 sudo 授权) ② 下载 Release fpk → 应用中心手动安装 (数据区保留)</div>'}
+async function hotUpdate(){$('hotstat').textContent='下载中… (约 50MB, 请稍候)';const b=event.target;b.disabled=true;
+const d=await api('/api/update/download',{method:'POST'});b.disabled=false;
+if(d&&d.ok){$('hotstat').innerHTML='<span class=ok>已下载 ('+Math.round(d.size/1048576)+'MB): '+d.file.split('/').pop()+'</span>';loadVersion();}
+else{$('hotstat').innerHTML='<span class=bad>'+(d&&d.err||'失败')+'</span>'}}
+async function applyUpdate(){if(!confirm('使用 appcenter-cli 安装更新? (会自动重启 dsh, 面板短暂离线)'))return;
+const d=await api('/api/update/apply',{method:'POST'});
+if(d&&d.ok){toast('安装指令已下发, App Center 安装中… 约 1 分钟后刷新页面');setTimeout(()=>location.reload(),60000)}
+else toast('安装失败: '+(d&&d.err||'可能未授权 sudo'),1)}
 async function loadPlugins(){const d=await api('/api/plugins');if(!d)return;
 let h='<table><tr><th>插件</th><th>版本</th><th>状态</th><th>操作</th></tr>';
 if(!d.plugins.length)h+='<tr><td colspan=4 style="color:var(--dim)">未安装第三方插件</td></tr>';
@@ -302,6 +384,12 @@ const server = http.createServer(async (req, res) => {
       return send(200, JSON.stringify({ ok: true, text: tail(map[f], n) }));
     }
     if (u.pathname === "/api/dsh/restart" && req.method === "POST") { restartDsh(); return send(200, JSON.stringify({ ok: true, msg: "restart dispatched" })); }
+    if (u.pathname === "/api/update/download" && req.method === "POST") return send(200, JSON.stringify(await updateDownload()));
+    if (u.pathname === "/api/update/apply" && req.method === "POST") return send(200, JSON.stringify(updateApply()));
+    if (u.pathname === "/api/update/state" && req.method === "GET") {
+      const files = fs.existsSync(UPDATE_DIR) ? fs.readdirSync(UPDATE_DIR).filter(f => f.endsWith(".fpk")) : [];
+      return send(200, JSON.stringify({ ok: true, updateDir: UPDATE_DIR, files, sudoHint: files.length ? "sudo tee /etc/sudoers.d/dsh-hotfix <<< 'dsh ALL=(root) NOPASSWD: /usr/local/bin/appcenter-cli install-fpk /vol*/@appdata/dsh/dsh_home/update/*'" : null }));
+    }
     if (u.pathname === "/api/plugins/toggle" && req.method === "POST") {
       const { name, enable } = await readBody(req);
       if (!/^[@a-zA-Z0-9._-]+$/.test(name || "")) return send(400, JSON.stringify({ ok: false, err: "bad name" }));
