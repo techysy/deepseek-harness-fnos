@@ -141,12 +141,39 @@ async function apiStatus() {
 }
 async function apiVersion() {
   const st = await apiStatus();
-  const out = { fpk: st.fpkVersion, dshInstalled: st.dshPkgVersion, upstreamDsh: null, projectRelease: null };
-  for (const reg of ["https://registry.npmmirror.com/@deepseek-ai/dsh", "https://registry.npmjs.org/@deepseek-ai/dsh"]) {
-    const r = await httpGet(reg + "/latest", 6000);
-    if (r.ok) { try { out.upstreamDsh = JSON.parse(r.body).version; break; } catch {} }
+  const out = { fpk: st.fpkVersion, dshInstalled: st.dshPkgVersion, upstreamDsh: null, upstreamTag: null, upstreamUrl: null, projectRelease: null };
+  
+  // 上游 dsh 版本探测: 优先查询 GitHub deepseek-ai/deepseek-harness Releases 的 tag
+  const ghUpstream = await httpGet("https://api.github.com/repos/deepseek-ai/deepseek-harness/releases?per_page=1", 6000);
+  if (ghUpstream.ok && ghUpstream.status === 200) {
+    try {
+      const list = JSON.parse(ghUpstream.body);
+      if (Array.isArray(list) && list.length > 0 && list[0].tag_name) {
+        const rawTag = list[0].tag_name;
+        out.upstreamTag = rawTag;
+        out.upstreamDsh = rawTag.replace(/^(dsh-)?v?/, "");
+        out.upstreamUrl = list[0].html_url || ("https://github.com/deepseek-ai/deepseek-harness/releases/tag/" + rawTag);
+      }
+    } catch {}
   }
-  // Release 探测 Gitee 优先 (国内可达性), 链接统一指向 GitHub Release
+  
+  // 兜底: 若 GitHub 探测不到上游 tag, 则从 npmmirror / npmjs 探测
+  if (!out.upstreamDsh) {
+    for (const reg of ["https://registry.npmmirror.com/@deepseek-ai/dsh", "https://registry.npmjs.org/@deepseek-ai/dsh"]) {
+      const r = await httpGet(reg + "/latest", 6000);
+      if (r.ok) {
+        try {
+          const v = JSON.parse(r.body).version;
+          out.upstreamDsh = v;
+          out.upstreamTag = "v" + v;
+          out.upstreamUrl = "https://github.com/deepseek-ai/deepseek-harness/releases";
+          break;
+        } catch {}
+      }
+    }
+  }
+
+  // 本项目 Release 探测 Gitee 优先 (国内可达性), 链接统一指向 GitHub Release
   let tag = null;
   const g = await httpGet("https://gitee.com/api/v5/repos/techysy/deepseek-harness-fnos/releases/latest", 6000);
   if (g.ok) { try { tag = JSON.parse(g.body).tag_name; } catch {} }
@@ -264,8 +291,8 @@ const HTML = `<!DOCTYPE html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>dsh Admin Panel</title>
 <style>
-:root{--bg:#0f1419;--card:#1a2129;--bd:#2a3441;--tx:#d8dee6;--dim:#8a97a6;--ac:#4da3ff;--ok:#3fb950;--bad:#f85149;--warn:#d29922;--pre:#0b0f14}
-body[data-theme="light"]{--bg:#f6f8fa;--card:#ffffff;--bd:#d0d7de;--tx:#1f2328;--dim:#656d76;--ac:#0969da;--ok:#1a7f37;--bad:#cf222e;--warn:#9a6700;--pre:#eef1f4}
+:root{--bg:#0f1419;--card:#1a2129;--bd:#2a3441;--tx:#d8dee6;--dim:#8a97a6;--ac:#4da3ff;--ok:#3fb950;--bad:#f85149;--warn:#d29922;--pre:#0b0f14;--modal-mask:rgba(0,0,0,0.65)}
+body[data-theme="light"]{--bg:#f6f8fa;--card:#ffffff;--bd:#d0d7de;--tx:#1f2328;--dim:#656d76;--ac:#0969da;--ok:#1a7f37;--bad:#cf222e;--warn:#9a6700;--pre:#eef1f4;--modal-mask:rgba(0,0,0,0.35)}
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:var(--bg);color:var(--tx);font:14px/1.6 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;padding:20px;max-width:1100px;margin:0 auto}
 .top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
@@ -279,8 +306,12 @@ h1{font-size:20px;margin-bottom:4px}h1 small{color:var(--dim);font-size:12px;fon
 .kv:last-child{border-bottom:none}
 .kv b{font-weight:normal;color:var(--dim)}
 .ok{color:var(--ok)}.bad{color:var(--bad)}.warn{color:var(--warn)}
-button{background:var(--ac);color:#fff;border:none;border-radius:6px;padding:6px 14px;cursor:pointer;font-size:13px}
-button.gray{background:var(--bd)}button.red{background:var(--bad)}button:disabled{opacity:.4;cursor:wait}
+button{background:var(--ac);color:#fff;border:none;border-radius:6px;padding:6px 14px;cursor:pointer;font-size:13px;transition:opacity .15s}
+button:hover{opacity:.9}
+button.gray{background:var(--bd);color:var(--tx)}
+button.red{background:var(--bad);color:#fff}
+button.warn-btn{background:var(--warn);color:#fff}
+button:disabled{opacity:.4;cursor:wait}
 table{width:100%;border-collapse:collapse;font-size:13px}
 td,th{padding:6px 4px;border-bottom:1px solid var(--bd);text-align:left}
 th{color:var(--dim);font-weight:normal}
@@ -288,8 +319,17 @@ pre{background:var(--pre);border:1px solid var(--bd);border-radius:8px;padding:1
 .row{display:flex;gap:8px;align-items:center;margin:6px 0;flex-wrap:wrap}
 input,select{background:var(--pre);color:var(--tx);border:1px solid var(--bd);border-radius:6px;padding:6px 8px;font-size:13px}
 .full{grid-column:1/-1}
-#toast{position:fixed;top:14px;right:14px;background:var(--card);border:1px solid var(--ac);border-radius:8px;padding:10px 16px;display:none}
-a{color:var(--ac)}
+#toast{position:fixed;top:14px;right:14px;background:var(--card);border:1px solid var(--ac);border-radius:8px;padding:10px 16px;display:none;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,0.25)}
+a{color:var(--ac);text-decoration:none}a:hover{text-decoration:underline}
+
+/* 自定义模态弹窗 */
+.modal-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:var(--modal-mask);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;z-index:10000;opacity:0;pointer-events:none;transition:opacity .2s ease}
+.modal-overlay.show{opacity:1;pointer-events:auto}
+.modal-box{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:20px 24px;max-width:440px;width:90%;box-shadow:0 12px 32px rgba(0,0,0,0.4);transform:scale(0.95);transition:transform .2s ease}
+.modal-overlay.show .modal-box{transform:scale(1)}
+.modal-title{font-size:16px;font-weight:600;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.modal-body{font-size:13px;color:var(--tx);line-height:1.6;margin-bottom:20px;word-break:break-word}
+.modal-foot{display:flex;justify-content:flex-end;gap:10px}
 </style></head><body data-theme="dark">
 <div class="top">
   <h1>🛠️ <span data-i="title"></span> <small id="sub"></small></h1>
@@ -305,7 +345,7 @@ a{color:var(--ac)}
     <div class="row" style="margin-top:10px"><button onclick="loadVersion()" data-i="checkUpdate"></button><span id="verlink"></span></div></div>
   <div class="card full"><h2><span data-i="plugins"></span> <small style="color:var(--dim)" data-i="pluginsHint"></small></h2>
     <div id="plugins"><span class="dim">…</span></div>
-    <div class="row"><input id="newpkg" style="flex:1">
+    <div class="row"><input id="newpkg" data-ip="newpkgPh" style="flex:1">
     <button onclick="addPlugin()" data-i="installPlugin"></button></div></div>
   <div class="card full"><h2 data-i="logs"></h2>
     <div class="row">
@@ -317,11 +357,24 @@ a{color:var(--ac)}
     <pre id="logview"><span class="dim">…</span></pre></div>
 </div>
 <div id="toast"></div>
+
+<!-- 自定义友好确认弹窗 -->
+<div id="modalOverlay" class="modal-overlay">
+  <div class="modal-box">
+    <div class="modal-title" id="modalTitle"></div>
+    <div class="modal-body" id="modalBody"></div>
+    <div class="modal-foot">
+      <button class="gray" id="modalCancelBtn" data-i="cancel">取消</button>
+      <button id="modalConfirmBtn" data-i="confirm">确定</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const $=id=>document.getElementById(id);
 const I18N={
-zh:{title:"dsh 管理面板",status:"服务状态",version:"版本 / 更新",plugins:"插件管理",pluginsHint:"(profile: web · bundles 开关需重启 dsh 生效)",logs:"日志",restart:"重启 dsh",refreshAll:"刷新全部",refresh:"刷新",loading:"加载中…",running:"运行中",notRunning:"未运行",health:"健康检查",proxy:"proxy 网关",upstreamVer:"上游 dsh 版本",fpkVer:"fpk 版本",npmLatest:"上游 dsh (npm latest)",projectRel:"本项目最新 Release",checkUpdate:"检查更新",plugin:"插件",ver:"版本",statusTh:"状态",actions:"操作",enabled:"启用",disabled:"禁用",noPlugins:"未安装第三方插件",coreBundles:"核心 bundles: ",installPlugin:"安装插件",newpkgPh:"@scope/plugin-name 或 包名",logApp:"app.log(生命周期)",logDsh:"dsh.log(dsh 输出)",logPanel:"dashboard.log(本面板)",autoRefresh:"自动刷新(5s)",emptyLog:"(空)",isLatest:"已是最新",hasNewPre:"有新版 ",hasNewMid:" (当前 ",detectFail:"探测失败",downloaded:"📥 已下载: ",installUpdate:"安装更新 (appcenter-cli)",sudoHint:"若失败, 先在 NAS 授权一次性 sudo:",hotDownload:"📥 一键下载到 NAS",hotHint:"下载对应架构 fpk (Gitee 优先)",downloading:"下载中… (约 50MB, 请稍候)",updateWays:"更新方式: ① 面板一键下载 → 安装更新 (需一次性 sudo 授权) ② 下载 Release fpk → 应用中心手动安装 (数据区保留)",restartConfirm:"重启 dsh? (面板会短暂离线, 30s 内自动恢复)",restartSent:"重启指令已发送…",restartDone:"重启完成",restartTimeout:"重启超时, 请刷新页面检查",fence403:"被信任围栏拒绝 (403)",reqFail:"请求失败: ",opFail:"操作失败",enableQ:"启用",disableQ:"禁用",qTail:"? (需重启 dsh 生效)",removeQ1:"删除插件 ",removeQ2:"? (从 bundles 移除 + pnpm remove)",enableDone:"已启用, 重启 dsh 生效",disableDone:"已禁用, 重启 dsh 生效",removeDone:"已删除",removeDonePnpm:"已删除 (pnpm remove 完成)",removeDoneNo:"已删除 (pnpm 不可用, 仅移出 bundles)",removeFail:"删除失败",addDone:"已安装并启用, 重启 dsh 生效",addFail:"安装失败: ",applyConfirm:"使用 appcenter-cli 安装更新? (会自动重启 dsh, 面板短暂离线)",applySent:"安装指令已下发, App Center 安装中… 约 1 分钟后刷新页面",applyFail:"安装失败: 可能未授权 sudo",hotDone:"已下载 (",dataDirLabel:"数据区"},
-en:{title:"dsh Admin Panel",status:"Service Status",version:"Version / Update",plugins:"Plugin Management",pluginsHint:"(profile: web · bundle toggles take effect after dsh restart)",logs:"Logs",restart:"Restart dsh",refreshAll:"Refresh all",refresh:"Refresh",loading:"Loading…",running:"Running",notRunning:"Not running",health:"Health check",proxy:"proxy gateway",upstreamVer:"Upstream dsh version",fpkVer:"fpk version",npmLatest:"Upstream dsh (npm latest)",projectRel:"Latest project Release",checkUpdate:"Check update",plugin:"Plugin",ver:"Version",statusTh:"Status",actions:"Actions",enabled:"Enabled",disabled:"Disabled",noPlugins:"No third-party plugins installed",coreBundles:"Core bundles: ",installPlugin:"Install plugin",newpkgPh:"@scope/plugin-name or package name",logApp:"app.log (lifecycle)",logDsh:"dsh.log (dsh output)",logPanel:"dashboard.log (panel)",autoRefresh:"Auto refresh (5s)",emptyLog:"(empty)",isLatest:"Up to date",hasNewPre:"New version available: ",hasNewMid:" (current ",detectFail:"Not detected",downloaded:"📥 Downloaded: ",installUpdate:"Install update (appcenter-cli)",sudoHint:"If it fails, grant one-time sudo on the NAS first:",hotDownload:"📥 Download to NAS",hotHint:"Download arch-matched fpk (Gitee first)",downloading:"Downloading… (~50MB, please wait)",updateWays:"Update paths: ① panel download → Install update (one-time sudo grant needed) ② download Release fpk → App Center manual install (data preserved)",restartConfirm:"Restart dsh? (panel briefly offline, auto-recovers within 30s)",restartSent:"Restart command sent…",restartDone:"Restart complete",restartTimeout:"Restart timed out, please refresh",fence403:"Blocked by trust fence (403)",reqFail:"Request failed: ",opFail:"Operation failed",enableQ:"Enable",disableQ:"Disable",qTail:"? (takes effect after dsh restart)",removeQ1:"Delete plugin ",removeQ2:"? (removes from bundles + pnpm remove)",enableDone:"Enabled, takes effect after dsh restart",disableDone:"Disabled, takes effect after dsh restart",removeDone:"Deleted",removeDonePnpm:"Deleted (pnpm remove done)",removeDoneNo:"Deleted (pnpm unavailable, removed from bundles only)",removeFail:"Delete failed",addDone:"Installed & enabled, takes effect after dsh restart",addFail:"Install failed: ",applyConfirm:"Install update via appcenter-cli? (dsh auto-restarts, panel briefly offline)",applySent:"Install dispatched, App Center installing… refresh in ~1 min",applyFail:"Install failed: sudo not granted?",hotDone:"Downloaded (",dataDirLabel:"data dir"}
+zh:{title:"dsh 管理面板",status:"服务状态",version:"版本 / 更新",plugins:"插件管理",pluginsHint:"(profile: web · bundles 开关需重启 dsh 生效)",logs:"日志",restart:"重启 dsh",refreshAll:"刷新全部",refresh:"刷新",loading:"加载中…",running:"运行中",notRunning:"未运行",health:"健康检查",proxy:"proxy 网关",upstreamVer:"上游 dsh 版本",fpkVer:"fpk 版本",npmLatest:"上游官方版本 (GitHub Tag)",projectRel:"本项目最新 Release",checkUpdate:"检查更新",plugin:"插件",ver:"版本",statusTh:"状态",actions:"操作",enabled:"启用",disabled:"禁用",noPlugins:"未安装第三方插件",coreBundles:"核心 bundles: ",installPlugin:"安装插件",newpkgPh:"@scope/plugin-name 或 包名",logApp:"app.log (生命周期)",logDsh:"dsh.log (dsh 输出)",logPanel:"dashboard.log (本面板)",autoRefresh:"自动刷新(5s)",emptyLog:"(空)",isLatest:"已是最新",hasNewPre:"发现新 Tag: ",hasNewMid:" (当前安装 ",detectFail:"探测失败",downloaded:"📥 已下载: ",installUpdate:"安装更新 (appcenter-cli)",sudoHint:"若失败, 先在 NAS 授权一次性 sudo:",hotDownload:"📥 一键下载到 NAS",hotHint:"下载对应架构 fpk (Gitee 优先)",downloading:"下载中… (约 50MB, 请稍候)",updateWays:"更新方式: ① 面板一键下载 → 安装更新 (需一次性 sudo 授权) ② 下载 Release fpk → 应用中心手动安装 (数据区保留)",restartConfirmTitle:"确认重启服务",restartConfirmMsg:"确定要重启 dsh 吗？管理面板会短暂离线，约 15~30 秒后自动恢复连接。",restartSent:"重启指令已发送…",restartDone:"重启完成",restartTimeout:"重启超时, 请刷新页面检查",fence403:"被信任围栏拒绝 (403)",reqFail:"请求失败: ",opFail:"操作失败",enableQ:"启用",disableQ:"禁用",enableConfirmTitle:"启用插件确认",disableConfirmTitle:"禁用插件确认",enableConfirmMsg:"确定要启用插件 {name} 吗？\n该操作修改配置后需重启 dsh 才能生效。",disableConfirmMsg:"确定要禁用插件 {name} 吗？\n禁用后此插件将被移出活动 bundles，需重启 dsh 生效。",removeConfirmTitle:"删除插件确认",removeConfirmMsg:"确定要彻底删除插件 {name} 吗？\n将从 profiles/web/package.json 彻底移除并清理依赖。此操作无法撤销！",enableDone:"已启用, 重启 dsh 生效",disableDone:"已禁用, 重启 dsh 生效",removeDone:"已删除",removeDonePnpm:"已删除 (pnpm remove 完成)",removeDoneNo:"已删除 (pnpm 不可用, 仅移出 bundles)",removeFail:"删除失败",addDone:"已安装并启用, 重启 dsh 生效",addFail:"安装失败: ",applyConfirmTitle:"确认热更新安装",applyConfirmMsg:"确定使用 appcenter-cli 覆盖安装此版本吗？\n安装期间系统会自动重启 dsh 服务，管理面板将短暂离线约 1 分钟。",applySent:"安装指令已下发, App Center 安装中… 约 1 分钟后刷新页面",applyFail:"安装失败: 可能未授权 sudo",hotDone:"已下载 (",dataDirLabel:"数据区",confirm:"确定",cancel:"取消"},
+en:{title:"dsh Admin Panel",status:"Service Status",version:"Version / Update",plugins:"Plugin Management",pluginsHint:"(profile: web · bundle toggles take effect after dsh restart)",logs:"Logs",restart:"Restart dsh",refreshAll:"Refresh all",refresh:"Refresh",loading:"Loading…",running:"Running",notRunning:"Not running",health:"Health check",proxy:"proxy gateway",upstreamVer:"Upstream dsh version",fpkVer:"fpk version",npmLatest:"Upstream Official (GitHub Tag)",projectRel:"Latest project Release",checkUpdate:"Check update",plugin:"Plugin",ver:"Version",statusTh:"Status",actions:"Actions",enabled:"Enabled",disabled:"Disabled",noPlugins:"No third-party plugins installed",coreBundles:"Core bundles: ",installPlugin:"Install plugin",newpkgPh:"@scope/plugin-name or package name",logApp:"app.log (lifecycle)",logDsh:"dsh.log (dsh output)",logPanel:"dashboard.log (panel)",autoRefresh:"Auto refresh (5s)",emptyLog:"(empty)",isLatest:"Up to date",hasNewPre:"New tag found: ",hasNewMid:" (installed ",detectFail:"Not detected",downloaded:"📥 Downloaded: ",installUpdate:"Install update (appcenter-cli)",sudoHint:"If it fails, grant one-time sudo on the NAS first:",hotDownload:"📥 Download to NAS",hotHint:"Download arch-matched fpk (Gitee first)",downloading:"Downloading… (~50MB, please wait)",updateWays:"Update paths: ① panel download → Install update (one-time sudo grant needed) ② download Release fpk → App Center manual install (data preserved)",restartConfirmTitle:"Restart Service",restartConfirmMsg:"Are you sure to restart dsh? The panel will go offline briefly and auto-recover in 15-30s.",restartSent:"Restart command sent…",restartDone:"Restart complete",restartTimeout:"Restart timed out, please refresh",fence403:"Blocked by trust fence (403)",reqFail:"Request failed: ",opFail:"Operation failed",enableQ:"Enable",disableQ:"Disable",enableConfirmTitle:"Enable Plugin",disableConfirmTitle:"Disable Plugin",enableConfirmMsg:"Enable plugin {name}?\nTakes effect after restarting dsh.",disableConfirmMsg:"Disable plugin {name}?\nIt will be removed from active bundles and take effect after restarting dsh.",removeConfirmTitle:"Remove Plugin",removeConfirmMsg:"Are you sure to permanently delete {name}?\nIt will be removed from package.json dependencies. This cannot be undone!",enableDone:"Enabled, takes effect after dsh restart",disableDone:"Disabled, takes effect after dsh restart",removeDone:"Deleted",removeDonePnpm:"Deleted (pnpm remove done)",removeDoneNo:"Deleted (pnpm unavailable, removed from bundles only)",removeFail:"Delete failed",addDone:"Installed & enabled, takes effect after dsh restart",addFail:"Install failed: ",applyConfirmTitle:"Confirm Hot Update",applyConfirmMsg:"Install this fpk update via appcenter-cli?\ndsh will automatically restart and the panel will be offline for about 1 minute.",applySent:"Install dispatched, App Center installing… refresh in ~1 min",applyFail:"Install failed: sudo not granted?",hotDone:"Downloaded (",dataDirLabel:"data dir",confirm:"Confirm",cancel:"Cancel"}
 };
 let LANG=localStorage.getItem("dsh-lang")||((navigator.language||"").toLowerCase().indexOf("zh")===0?"zh":"en");
 function t(k){const d=I18N[LANG]||I18N.zh;return d[k]!==undefined?d[k]:(I18N.zh[k]!==undefined?I18N.zh[k]:k)}
@@ -334,6 +387,46 @@ let THEME=localStorage.getItem("dsh-theme")||(window.matchMedia&&matchMedia("(pr
 function applyTheme(){document.body.dataset.theme=THEME;$("themeBtn").textContent=THEME==="dark"?"🌙":"☀️"}
 function toggleTheme(){THEME=THEME==="dark"?"light":"dark";localStorage.setItem("dsh-theme",THEME);applyTheme()}
 function toast(m,bad){const t2=$("toast");t2.textContent=m;t2.style.borderColor=bad?"var(--bad)":"var(--ac)";t2.style.display="block";setTimeout(()=>t2.style.display="none",2600)}
+
+// 现代友好的异步模态确认弹窗
+function modalConfirm({title, text, okText, cancelText, danger, warn}){
+  return new Promise(resolve=>{
+    const ov=$("modalOverlay");
+    const tit=$("modalTitle");
+    const bod=$("modalBody");
+    const okBtn=$("modalConfirmBtn");
+    const cancelBtn=$("modalCancelBtn");
+    tit.innerHTML=(danger?'⚠️ ':'')+(title||t("confirm"));
+    bod.style.whiteSpace="pre-wrap";
+    bod.textContent=text||"";
+    okBtn.textContent=okText||t("confirm");
+    cancelBtn.textContent=cancelText||t("cancel");
+    okBtn.className="";
+    if(danger) okBtn.className="red";
+    else if(warn) okBtn.className="warn-btn";
+    
+    function cleanup(res){
+      ov.classList.remove("show");
+      okBtn.removeEventListener("click", onOk);
+      cancelBtn.removeEventListener("click", onCancel);
+      ov.removeEventListener("click", onOverlay);
+      window.removeEventListener("keydown", onKey);
+      resolve(res);
+    }
+    function onOk(){ cleanup(true); }
+    function onCancel(){ cleanup(false); }
+    function onOverlay(e){ if(e.target===ov) cleanup(false); }
+    function onKey(e){ if(e.key==="Escape") cleanup(false); }
+
+    okBtn.addEventListener("click", onOk);
+    cancelBtn.addEventListener("click", onCancel);
+    ov.addEventListener("click", onOverlay);
+    window.addEventListener("keydown", onKey);
+    ov.classList.add("show");
+    okBtn.focus();
+  });
+}
+
 async function api(p,opt){try{const r=await fetch(p,opt);if(r.status===403){toast(t("fence403"),1);return null}return await r.json()}catch(e){toast(t("reqFail")+e.message,1);return null}}
 function kv(k,v){return '<div class="kv"><b>'+k+"</b><span>"+v+"</span></div>"}
 async function loadStatus(){const d=await api("/api/status");if(!d)return;$("sub").textContent="fpk "+d.fpkVersion+" · "+t("dataDirLabel")+" "+d.dataDir;
@@ -344,7 +437,12 @@ kv(t("proxy"), d.proxy.running?'<span class=ok>'+t("running")+"</span>":('<span 
 kv(t("upstreamVer"), d.dshPkgVersion)}
 async function loadVersion(){const d=await api("/api/version");if(!d)return;
 let up="";
-if(d.upstreamDsh) up=(d.upstreamDsh===d.dshInstalled)?('<span class=ok>'+t("isLatest")+"</span>"):('<span class=warn>'+t("hasNewPre")+d.upstreamDsh+t("hasNewMid")+d.dshInstalled+")</span>");else up='<span class=dim>'+t("detectFail")+"</span>";
+if(d.upstreamDsh){
+  const tagDisplay=d.upstreamTag||("v"+d.upstreamDsh);
+  const tagLink=d.upstreamUrl?('<a href="'+d.upstreamUrl+'" target="_blank">'+tagDisplay+"</a>"):tagDisplay;
+  if(d.upstreamDsh===d.dshInstalled) up='<span class=ok>'+tagLink+' ('+t("isLatest")+')</span>';
+  else up='<span class=warn>'+t("hasNewPre")+tagLink+t("hasNewMid")+d.dshInstalled+")</span>";
+} else up='<span class=dim>'+t("detectFail")+"</span>";
 let pr=d.projectRelease?('<a href="'+d.projectRelease.url+'" target="_blank">'+d.projectRelease.tag+"</a>"):'<span class=dim>'+t("detectFail")+"</span>";
 let hot="";
 try{const st=await api("/api/update/state");
@@ -357,33 +455,67 @@ async function hotUpdate(){$("hotstat").textContent=t("downloading");const b=eve
 const d=await api("/api/update/download",{method:"POST"});b.disabled=false;
 if(d&&d.ok){$("hotstat").innerHTML='<span class=ok>'+t("hotDone")+Math.round(d.size/1048576)+"MB): "+d.file.split("/").pop()+"</span>";loadVersion();}
 else{$("hotstat").innerHTML='<span class=bad>'+((d&&d.err)||t("opFail"))+"</span>"}}
-async function applyUpdate(){if(!confirm(t("applyConfirm")))return;
-const d=await api("/api/update/apply",{method:"POST"});
-if(d&&d.ok){toast(t("applySent"));setTimeout(()=>location.reload(),60000)}
-else toast(t("applyFail"),1)}
+async function applyUpdate(){
+  const confirmed = await modalConfirm({
+    title: t("applyConfirmTitle"),
+    text: t("applyConfirmMsg"),
+    okText: t("installUpdate"),
+    warn: true
+  });
+  if(!confirmed) return;
+  const d=await api("/api/update/apply",{method:"POST"});
+  if(d&&d.ok){toast(t("applySent"));setTimeout(()=>location.reload(),60000)}
+  else toast(t("applyFail"),1);
+}
 async function loadPlugins(){const d=await api("/api/plugins");if(!d)return;
 let h='<table><tr><th>'+t("plugin")+"</th><th>"+t("ver")+"</th><th>"+t("statusTh")+"</th><th>"+t("actions")+"</th></tr>";
 if(!d.plugins.length)h+='<tr><td colspan=4 style="color:var(--dim)">'+t("noPlugins")+"</td></tr>";
-for(const p of d.plugins){h+='<tr><td>'+p.name+"</td><td>"+p.version+"</td><td>"+(p.enabled?'<span class=ok>'+t("enabled")+"</span>":('<span class=warn>'+t("disabled")+"</span>"))+
-"</td><td>"+(p.enabled?'<button class=gray data-act="dis" data-name="'+p.name+'">'+t("disableQ")+"</button>":('<button data-act="en" data-name="'+p.name+'">'+t("enableQ")+"</button>"))+
-' <button class=red data-act="rm" data-name="'+p.name+'">✕</button></td></tr>'}
+for(const p of d.plugins){
+  h+='<tr><td><b>'+p.name+"</b></td><td>"+p.version+"</td><td>"+(p.enabled?'<span class=ok>'+t("enabled")+"</span>":('<span class=warn>'+t("disabled")+"</span>"))+
+  "</td><td>"+(p.enabled?'<button class=gray data-act="dis" data-name="'+p.name+'">'+t("disableQ")+"</button>":('<button data-act="en" data-name="'+p.name+'">'+t("enableQ")+"</button>"))+
+  ' <button class=red data-act="rm" data-name="'+p.name+'">✕</button></td></tr>';
+}
 h+="</table>"+'<div style="color:var(--dim);margin-top:6px">'+t("coreBundles")+d.coreBundles.join(" , ")+"</div>";
 $("plugins").innerHTML=h}
 document.addEventListener("click",e=>{const b=e.target.closest("[data-act]");if(!b)return;const n=b.dataset.name,a=b.dataset.act;
 if(a==="dis")plug(n,false);else if(a==="en")plug(n,true);else if(a==="rm")plugRemove(n)});
-async function plug(name,enable){if(!confirm((enable?t("enableQ"):t("disableQ"))+" "+name+t("qTail")))return;
-const d=await api("/api/plugins/toggle",{method:"POST",headers:{'Content-Type':'application/json'},body:JSON.stringify({name,enable})});
-d&&d.ok?(toast(enable?t("enableDone"):t("disableDone")),loadPlugins()):toast(t("opFail"),1)}
-async function plugRemove(name){if(!confirm(t("removeQ1")+name+t("removeQ2")))return;
-const d=await api("/api/plugins/remove",{method:"POST",headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});
-d&&d.ok?(toast(d.pnpm?t("removeDonePnpm"):t("removeDoneNo")),loadPlugins()):toast(t("removeFail"),1)}
+async function plug(name,enable){
+  const confirmed = await modalConfirm({
+    title: enable ? t("enableConfirmTitle") : t("disableConfirmTitle"),
+    text: (enable ? t("enableConfirmMsg") : t("disableConfirmMsg")).replace("{name}", name),
+    okText: enable ? t("enableQ") : t("disableQ"),
+    warn: !enable
+  });
+  if(!confirmed) return;
+  const d=await api("/api/plugins/toggle",{method:"POST",headers:{'Content-Type':'application/json'},body:JSON.stringify({name,enable})});
+  d&&d.ok?(toast(enable?t("enableDone"):t("disableDone")),loadPlugins()):toast(t("opFail"),1);
+}
+async function plugRemove(name){
+  const confirmed = await modalConfirm({
+    title: t("removeConfirmTitle"),
+    text: t("removeConfirmMsg").replace("{name}", name),
+    okText: t("actions") || "Delete",
+    danger: true
+  });
+  if(!confirmed) return;
+  const d=await api("/api/plugins/remove",{method:"POST",headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});
+  d&&d.ok?(toast(d.pnpm?t("removeDonePnpm"):t("removeDoneNo")),loadPlugins()):toast(t("removeFail"),1);
+}
 async function addPlugin(){const n=$("newpkg").value.trim();if(!n)return;
 const d=await api("/api/plugins/add",{method:"POST",headers:{'Content-Type':'application/json'},body:JSON.stringify({name:n})});
 d&&d.ok?(toast(t("addDone")),$("newpkg").value="",loadPlugins()):toast(t("addFail")+(d&&d.err||""),1)}
-async function restartDsh(){if(!confirm(t("restartConfirm")))return;
-toast(t("restartSent"));try{await fetch("/api/dsh/restart",{method:"POST"})}catch(e){}
-for(let i=0;i<15;i++){await new Promise(r=>setTimeout(r,2000));try{const d=await api("/api/status");if(d&&d.dsh.health==="OK"){toast(t("restartDone"));loadAll();return}}catch(e){}}
-toast(t("restartTimeout"),1)}
+async function restartDsh(){
+  const confirmed = await modalConfirm({
+    title: t("restartConfirmTitle"),
+    text: t("restartConfirmMsg"),
+    okText: t("restart"),
+    warn: true
+  });
+  if(!confirmed) return;
+  toast(t("restartSent"));try{await fetch("/api/dsh/restart",{method:"POST"})}catch(e){}
+  for(let i=0;i<15;i++){await new Promise(r=>setTimeout(r,2000));try{const d=await api("/api/status");if(d&&d.dsh.health==="OK"){toast(t("restartDone"));loadAll();return}}catch(e){}}
+  toast(t("restartTimeout"),1);
+}
 async function loadLogs(){const f=$("logfile").value,n=$("lines").value;const d=await api("/api/logs?file="+f+"&lines="+n);if(d&&d.ok)$("logview").textContent=d.text||t("emptyLog")}
 let timer=null;function autoLogs(){clearInterval(timer);if($("auto").checked)timer=setInterval(loadLogs,5000)}
 function loadAll(){loadStatus();loadVersion();loadPlugins();loadLogs()}
@@ -418,7 +550,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (u.pathname === "/api/plugins/toggle" && req.method === "POST") {
       const { name, enable } = await readBody(req);
-      if (!/^[@a-zA-Z0-9._-]+$/.test(name || "")) return send(400, JSON.stringify({ ok: false, err: "bad name" }));
+      if (!/^[@a-zA-Z0-9._\/-]+$/.test(name || "")) return send(400, JSON.stringify({ ok: false, err: "bad name" }));
       savePlugins((bundles) => {
         const set = new Set(bundles);
         if (enable) set.add(name); else set.delete(name);
@@ -428,7 +560,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (u.pathname === "/api/plugins/remove" && req.method === "POST") {
       const { name } = await readBody(req);
-      if (!/^[@a-zA-Z0-9._-]+$/.test(name || "")) return send(400, JSON.stringify({ ok: false, err: "bad name" }));
+      if (!/^[@a-zA-Z0-9._\/-]+$/.test(name || "")) return send(400, JSON.stringify({ ok: false, err: "bad name" }));
       let pnpm = false;
       try {
         execSync(`pnpm remove ${JSON.stringify(name)}`, { cwd: PROFILE(), stdio: "ignore", timeout: 120000, env: process.env });
