@@ -91,8 +91,23 @@ start_dsh() {
     if [ -f "${DSH_PID}" ] && kill -0 "$(cat "${DSH_PID}")" 2>/dev/null; then
         return 0
     fi
+    # 自愈: 若端口 DSH_PORT 已被残留孤儿进程占用, 尝试清理防 EADDRINUSE
+    local port_pids
+    port_pids="$(fuser "${DSH_PORT}/tcp" 2>/dev/null || true)"
+    if [ -n "${port_pids}" ]; then
+        log "WARN: port ${DSH_PORT} occupied by [${port_pids}], killing stale process..."
+        fuser -k -9 "${DSH_PORT}/tcp" 2>/dev/null || true
+        sleep 1
+    fi
     # 初始化 DSH_HOME
     mkdir -p "${DSH_HOME}/profiles/web" "${DSH_HOME}/logs" 2>/dev/null
+    # 权限自愈: dsh 强制安全要求 .credentials.yaml / .env 必须是 mode 600 (只属主可读写),
+    # 否则抛 credentials-local: is readable beyond its owner (mode 770) 拒不启动.
+    chmod 600 "${DSH_HOME}/.credentials.yaml"* "${DSH_HOME}/.env" 2>/dev/null || true
+    # 确保隐藏文件若被 root 误调试创建时属主归还给当前用户 (防 chokidar EACCES)
+    if [ "$(id -u)" != "0" ] && [ -f "${DSH_HOME}/.gitconfig" ] && [ ! -r "${DSH_HOME}/.gitconfig" ]; then
+        chmod 644 "${DSH_HOME}/.gitconfig" 2>/dev/null || true
+    fi
     # dsh 用 os.homedir() 作为工作目录, 默认 /home/dsh 不存在会导致 ENOENT.
     # 确保存在且可写, 并把 HOME 指向 DSH_HOME (数据区, 可持久).
     if [ "${HOME:-}" != "${DSH_HOME}" ]; then
@@ -345,6 +360,10 @@ start_dashboard() {
 
 start() {
     mkdir -p "${DATA_DIR}" "${DSH_HOME}"
+    # 防死锁: 若历史 pid 文件因权限或所有权不可写, 尝试清理
+    for pf in "${DSH_PID}" "${PROXY_PID}" "${DASH_PID}"; do
+        [ -e "${pf}" ] && [ ! -w "${pf}" ] && rm -f "${pf}" 2>/dev/null || true
+    done
     find_dsh_bin
     start_dsh
     start_proxy
@@ -367,11 +386,14 @@ stop() {
         rm -f "${PROXY_PID}"
         log "proxy stopped"
     fi
+    pkill -u "$(id -u)" -f "${PROXY_SRC}" 2>/dev/null || true
     if [ -f "${DSH_PID}" ]; then
         kill "$(cat "${DSH_PID}")" 2>/dev/null
         rm -f "${DSH_PID}"
         log "dsh web stopped"
     fi
+    # 兜底确保释放 28000 端口
+    fuser -k "${DSH_PORT}/tcp" 2>/dev/null || true
     return 0
 }
 
