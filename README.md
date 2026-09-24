@@ -19,14 +19,14 @@ DeepSeek 官方 Agent 浏览器 UI（一切皆插件）的 fnOS 快捷入口。
 
 ## 版本说明
 
-当前版本：**0.1.7-rc.1**（升级上游 dsh 0.1.7-rc.1，内置 28001 管理面板）
+当前版本：**0.1.7-rc.2**（升级上游 dsh 0.1.7-rc.2，CI 自动上传 Release 资产）
 
 | 文件 | 架构 | 类型 | 说明 |
 |------|------|------|------|
-| `dsh-0.1.7-rc.1-iframe-x86.fpk` | x86 | iframe | 桌面窗口内打开（**推荐**） |
-| `dsh-0.1.7-rc.1-x86.fpk` | x86 | url | 新标签页打开 |
-| `dsh-0.1.7-rc.1-iframe-arm.fpk` | ARM | iframe | 桌面窗口内打开（**推荐**） |
-| `dsh-0.1.7-rc.1-arm.fpk` | ARM | url | 新标签页打开 |
+| `dsh-0.1.7-rc.2-iframe-x86.fpk` | x86 | iframe | 桌面窗口内打开（**推荐**） |
+| `dsh-0.1.7-rc.2-x86.fpk` | x86 | url | 新标签页打开 |
+| `dsh-0.1.7-rc.2-iframe-arm.fpk` | ARM | iframe | 桌面窗口内打开（**推荐**） |
+| `dsh-0.1.7-rc.2-arm.fpk` | ARM | url | 新标签页打开 |
 
 全部为**离线包**（含对应架构 node_modules），安装免联网。ARM 版在 manylinux_2_28 容器构建，兼容旧 glibc。
 

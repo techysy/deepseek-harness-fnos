@@ -1,8 +1,8 @@
 appname               = dsh
-version               = 0.1.7-rc.1
+version               = 0.1.7-rc.2
 display_name          = DeepSeek Harness
-desc                  = DeepSeek Harness 自托管版 — 基于 @deepseek-ai/dsh v0.1.7-rc.1，离线打包，局域网直连 NAS_IP:28000，管理面板 :28001
-changelog             = v0.1.7-rc.1: 升级上游 0.1.7-rc.1（Web 侧边栏终端/会话归档/文件改动审阅/Office预览）；管理面板 (:28001) 支持状态监控与插件管理
+desc                  = DeepSeek Harness 自托管版 — 基于 @deepseek-ai/dsh v0.1.7-rc.2，离线打包，局域网直连 NAS_IP:28000，管理面板 :28001
+changelog             = v0.1.7-rc.2: 升级上游 0.1.7-rc.2（定时任务/快捷键/长对话修复）；CI 自动上传 Release 资产；面板热更新走 GitHub 直链
 platform              = x86
 source                = thirdparty
 maintainer            = techysy

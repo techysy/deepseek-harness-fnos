@@ -23,6 +23,10 @@ on:
         options:
           - 'true'
           - 'false'
+      release_tag:
+        description: '打包完成后自动上传 Release 资产的 tag (如 v0.1.7-rc.2; 留空则只产 artifacts)'
+        required: false
+        default: ''
 
 concurrency:
   group: build-dsh-fpk-${{ github.ref }}-${{ inputs.arch }}
@@ -32,6 +36,8 @@ jobs:
   build-fpk:
     runs-on: ${{ inputs.arch == 'arm' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     timeout-minutes: 120
+    permissions:
+      contents: write
     steps:
       - name: Checkout deepseek-harness-fnos
         uses: actions/checkout@v4
@@ -188,6 +194,27 @@ jobs:
             dsh-*-iframe-${{ inputs.arch }}.fpk
           if-no-files-found: error
           retention-days: 14
+
+      # ── 自动上传 Release 资产 (release_tag 输入非空时) ────────────────
+      # 双架构两次 dispatch 各传自己的 2 个 fpk 到同一 Release; Release 不存在
+      # 时创建 (generate-notes 占位, 发布者随后用正式 notes 覆盖 body)。
+      # --clobber 幂等: 同名资产覆盖, 重跑安全。
+      - name: 自动上传 Release 资产
+        if: inputs.release_tag != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.release_tag }}
+        run: |
+          VERSION="${TAG#v}"
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
+            || gh release create "$TAG" --repo "$GITHUB_REPOSITORY" \
+                 --title "🚀 DeepSeek Harness fnOS $VERSION" \
+                 --generate-notes
+          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber \
+            "dsh-${VERSION}-${{ inputs.arch }}.fpk" \
+            "dsh-${VERSION}-iframe-${{ inputs.arch }}.fpk"
+          echo "## 📦 已自动上传 Release 资产 → \`$TAG\` (${{ inputs.arch }})" >> "$GITHUB_STEP_SUMMARY"
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name'
 
       - name: Summary
         run: |
