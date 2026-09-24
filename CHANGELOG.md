@@ -1,5 +1,29 @@
 # CHANGELOG
 
+## 🚀 0.1.7-rc.1 (2026-09-24)
+
+> 升级上游 `@deepseek-ai/dsh` 到 0.1.7-rc.1（npm `next` 标签；汇总自 v0.1.5-rc.3 以来的主要功能与重构）。打包方式：GitHub Actions 在线 CI（arm / x86 双架构）+ 离线依赖。fpk 版本号严格跟随上游发行版。
+
+### ✨ 上游主要变更（0.1.5-rc.3 → 0.1.7-rc.1）
+- **Web 侧边栏终端**：新增终端，支持多标签、Shell 选择与刷新后恢复
+- **管理会话归档**：支持置顶、筛选、恢复，归档运行中会话时确认受影响任务
+- **会话文件改动审阅**：卡片与侧边栏支持逐行/左右分栏/高亮/同步滚动/悬停预览，改善明暗配色
+- **Office / 多格式预览**：侧边栏预览 Word、Excel（支持工作表、公式与复制）、PPT、CSV、TSV
+- **插件管理全面强化**：支持安装、配置、启停与运行时卸载；安装源支持官方源、国内镜像及自定义源
+- **MCP 升级至官方 SDK v2**：支持协议协商、工具分页、资源发现与 URI 模板，新增实验性 Playwright MCP / Chrome DevTools MCP
+- **Headless 与 Subagent 增强**：支持 stdin 接收任务、`--session-id` 继续会话、`--json` 输出运行事件；侧边栏支持打开 Subagent 会话与浏览器模式
+- **体验与性能优化**：首次启动自动创建默认工作区与空白会话；长会话初始化与轮次跳转优化；长时间命令/工作流转入后台任务面板
+
+### 🛠️ fpk 本地特性与自愈加固
+- **28001 管理面板**：日夜主题切换、中英双语 i18n、GitHub Release Tag 探测、Scoped 插件禁用正则修复、友好模态弹窗、CI 构建产物一键热更新
+- **启动环境自愈**：启动前强制修正 `.credentials.yaml` / `.env` 为 600 权限（防 dsh 安全断言报错）；清理残留占用进程（防 EADDRINUSE）；纠正 `.gitconfig` 权限（防 chokidar EACCES）
+- **离线依赖安全**：锁定 npmjs 官方源 package-lock.json，manifest 必需依赖（`nodejs_v24:bunjs`）硬校验
+
+### ⚠️ 升级注意（补丁兼容性审计结论）
+- **settings memory→host 补丁**：`ctx.remote.$host.isLoopback ? "host" : "memory"` 逐字节完全匹配，补丁顺利生效 ✓
+- **桌面 401 鉴权绕过**：`isAuthenticated(request) {\n\t\tconst authority = requestAuthority(request.headers);` 模式完全命中，桌面入口依然免密直连 ✓
+- **Session 格式升级为 V4**：老用户历史会话自动触发升级迁移，保留原始会话记录
+
 ## 🚀 0.1.5-rc.2 (2026-09-12)
 
 > 升级上游 `@deepseek-ai/dsh` 到 0.1.5-rc.2（npm `next` 标签；rc.1→rc.2 为小幅体验优化）。**本版起新装机自动安装/启用 nodejs_v24 + bunjs**（恢复被误删的 `install_dep_apps` 声明），并内置 28001 管理面板。
