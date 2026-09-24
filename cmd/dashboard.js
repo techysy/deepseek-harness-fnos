@@ -173,13 +173,21 @@ async function apiVersion() {
     }
   }
 
-  // 本项目 Release 探测 Gitee 优先 (国内可达性), 链接统一指向 GitHub Release
+  // 本项目 Release 探测: GitHub 优先 (列表降序, per_page=1 即最新), Gitee 兜底
+  // (Gitee 列表为升序, 须取全量后按 created_at 取最新; /releases/latest 对纯
+  //  prerelease 仓库在 GitHub 恒 404, Gitee 语义亦不稳, 统一走列表端点)
   let tag = null;
-  const g = await httpGet("https://gitee.com/api/v5/repos/techysy/deepseek-harness-fnos/releases/latest", 6000);
-  if (g.ok) { try { tag = JSON.parse(g.body).tag_name; } catch {} }
+  const h = await httpGet("https://api.github.com/repos/techysy/deepseek-harness-fnos/releases?per_page=1", 6000);
+  if (h.ok) { try { const l = JSON.parse(h.body); if (Array.isArray(l) && l[0] && l[0].tag_name) tag = l[0].tag_name; } catch {} }
   if (!tag) {
-    const h = await httpGet("https://api.github.com/repos/techysy/deepseek-harness-fnos/releases/latest", 6000);
-    if (h.ok) { try { tag = JSON.parse(h.body).tag_name; } catch {} }
+    const g = await httpGet("https://gitee.com/api/v5/repos/techysy/deepseek-harness-fnos/releases?per_page=100", 6000);
+    if (g.ok) {
+      try {
+        const l = JSON.parse(g.body);
+        if (Array.isArray(l) && l.length)
+          tag = l.reduce((a, b) => ((a.created_at || "") > (b.created_at || "") ? a : b)).tag_name;
+      } catch {}
+    }
   }
   if (tag) out.projectRelease = { tag, url: "https://github.com/techysy/deepseek-harness-fnos/releases/tag/" + tag };
   return out;
@@ -238,10 +246,19 @@ function downloadToFile(url, dest, depth = 0) {
   });
 }
 async function fetchLatestRelease() {
-  for (const u of ["https://gitee.com/api/v5/repos/techysy/deepseek-harness-fnos/releases/latest",
-                   "https://api.github.com/repos/techysy/deepseek-harness-fnos/releases/latest"]) {
-    const r = await httpGet(u, 8000);
-    if (r.ok && r.status === 200) { try { const d = JSON.parse(r.body); if (d.tag_name) return d; } catch {} }
+  // GitHub 优先: 0.1.7-rc.1 起 fpk >100MB 超 Gitee 附件上限, Release 附件只在 GitHub;
+  // GitHub 列表降序 per_page=1 即最新。Gitee 兜底: 列表升序, 须取全量按 created_at
+  // 挑最新 (老版本仍有附件)。/releases/latest 对纯 prerelease 仓库在 GitHub 恒 404。
+  const gh = await httpGet("https://api.github.com/repos/techysy/deepseek-harness-fnos/releases?per_page=1", 8000);
+  if (gh.ok && gh.status === 200) {
+    try { const l = JSON.parse(gh.body); if (Array.isArray(l) && l[0] && l[0].tag_name) return l[0]; } catch {}
+  }
+  const g = await httpGet("https://gitee.com/api/v5/repos/techysy/deepseek-harness-fnos/releases?per_page=100", 8000);
+  if (g.ok && g.status === 200) {
+    try {
+      const l = JSON.parse(g.body);
+      if (Array.isArray(l) && l.length) return l.reduce((a, b) => ((a.created_at || "") > (b.created_at || "") ? a : b));
+    } catch {}
   }
   return null;
 }
@@ -255,11 +272,11 @@ let updateBusy = false;
 async function updateDownload() {
   if (updateBusy) return { ok: false, err: "已有下载在进行" };
   const rel = await fetchLatestRelease();
-  if (!rel) return { ok: false, err: "无法获取最新 Release (Gitee/GitHub 均不可达)" };
+  if (!rel) return { ok: false, err: "无法获取最新 Release (GitHub/Gitee 均不可达)" };
   const cur = manifestField("version");
   const tag = (rel.tag_name || "").replace(/^v/, "");
   const asset = assetFor(rel, ARCH, "iframe") || assetFor(rel, ARCH, "");
-  if (!asset || !asset.url) return { ok: false, err: "Release 中未找到 " + ARCH + " 架构的 fpk 资产" };
+  if (!asset || !asset.url) return { ok: false, err: "Release 未含 " + ARCH + " 架构 fpk 附件 (0.1.7 起 Gitee 超 100MB 上限停传, 需 GitHub 可达)" };
   if (tag === cur && !rel.prerelease) return { ok: false, err: "当前已是最新版本 " + cur, same: true };
   updateBusy = true;
   try {
@@ -373,8 +390,8 @@ a{color:var(--ac);text-decoration:none}a:hover{text-decoration:underline}
 <script>
 const $=id=>document.getElementById(id);
 const I18N={
-zh:{title:"dsh 管理面板",status:"服务状态",version:"版本 / 更新",plugins:"插件管理",pluginsHint:"(profile: web · bundles 开关需重启 dsh 生效)",logs:"日志",restart:"重启 dsh",refreshAll:"刷新全部",refresh:"刷新",loading:"加载中…",running:"运行中",notRunning:"未运行",health:"健康检查",proxy:"proxy 网关",upstreamVer:"上游 dsh 版本",fpkVer:"fpk 版本",npmLatest:"上游官方版本 (GitHub Tag)",projectRel:"本项目最新 Release",checkUpdate:"检查更新",plugin:"插件",ver:"版本",statusTh:"状态",actions:"操作",enabled:"启用",disabled:"禁用",noPlugins:"未安装第三方插件",coreBundles:"核心 bundles: ",installPlugin:"安装插件",newpkgPh:"@scope/plugin-name 或 包名",logApp:"app.log (生命周期)",logDsh:"dsh.log (dsh 输出)",logPanel:"dashboard.log (本面板)",autoRefresh:"自动刷新(5s)",emptyLog:"(空)",isLatest:"已是最新",hasNewPre:"发现新 Tag: ",hasNewMid:" (当前安装 ",detectFail:"探测失败",downloaded:"📥 已下载: ",installUpdate:"安装更新 (appcenter-cli)",sudoHint:"若失败, 先在 NAS 授权一次性 sudo:",hotDownload:"📥 一键下载到 NAS",hotHint:"下载对应架构 fpk (Gitee 优先)",downloading:"下载中… (约 50MB, 请稍候)",updateWays:"更新方式: ① 面板一键下载 → 安装更新 (需一次性 sudo 授权) ② 下载 Release fpk → 应用中心手动安装 (数据区保留)",restartConfirmTitle:"确认重启服务",restartConfirmMsg:"确定要重启 dsh 吗？管理面板会短暂离线，约 15~30 秒后自动恢复连接。",restartSent:"重启指令已发送…",restartDone:"重启完成",restartTimeout:"重启超时, 请刷新页面检查",fence403:"被信任围栏拒绝 (403)",reqFail:"请求失败: ",opFail:"操作失败",enableQ:"启用",disableQ:"禁用",enableConfirmTitle:"启用插件确认",disableConfirmTitle:"禁用插件确认",enableConfirmMsg:"确定要启用插件 {name} 吗？修改配置后需重启 dsh 才能生效。",disableConfirmMsg:"确定要禁用插件 {name} 吗？禁用后此插件将被移出活动 bundles，需重启 dsh 生效。",removeConfirmTitle:"删除插件确认",removeConfirmMsg:"确定要彻底删除插件 {name} 吗？将从 profiles/web/package.json 彻底移除并清理依赖。此操作无法撤销！",enableDone:"已启用, 重启 dsh 生效",disableDone:"已禁用, 重启 dsh 生效",removeDone:"已删除",removeDonePnpm:"已删除 (pnpm remove 完成)",removeDoneNo:"已删除 (pnpm 不可用, 仅移出 bundles)",removeFail:"删除失败",addDone:"已安装并启用, 重启 dsh 生效",addFail:"安装失败: ",applyConfirmTitle:"确认热更新安装",applyConfirmMsg:"确定使用 appcenter-cli 覆盖安装此版本吗？安装期间系统会自动重启 dsh 服务，管理面板将短暂离线约 1 分钟。",applySent:"安装指令已下发, App Center 安装中… 约 1 分钟后刷新页面",applyFail:"安装失败: 可能未授权 sudo",hotDone:"已下载 (",dataDirLabel:"数据区",confirm:"确定",cancel:"取消"},
-en:{title:"dsh Admin Panel",status:"Service Status",version:"Version / Update",plugins:"Plugin Management",pluginsHint:"(profile: web · bundle toggles take effect after dsh restart)",logs:"Logs",restart:"Restart dsh",refreshAll:"Refresh all",refresh:"Refresh",loading:"Loading…",running:"Running",notRunning:"Not running",health:"Health check",proxy:"proxy gateway",upstreamVer:"Upstream dsh version",fpkVer:"fpk version",npmLatest:"Upstream Official (GitHub Tag)",projectRel:"Latest project Release",checkUpdate:"Check update",plugin:"Plugin",ver:"Version",statusTh:"Status",actions:"Actions",enabled:"Enabled",disabled:"Disabled",noPlugins:"No third-party plugins installed",coreBundles:"Core bundles: ",installPlugin:"Install plugin",newpkgPh:"@scope/plugin-name or package name",logApp:"app.log (lifecycle)",logDsh:"dsh.log (dsh output)",logPanel:"dashboard.log (panel)",autoRefresh:"Auto refresh (5s)",emptyLog:"(empty)",isLatest:"Up to date",hasNewPre:"New tag found: ",hasNewMid:" (installed ",detectFail:"Not detected",downloaded:"📥 Downloaded: ",installUpdate:"Install update (appcenter-cli)",sudoHint:"If it fails, grant one-time sudo on the NAS first:",hotDownload:"📥 Download to NAS",hotHint:"Download arch-matched fpk (Gitee first)",downloading:"Downloading… (~50MB, please wait)",updateWays:"Update paths: ① panel download → Install update (one-time sudo grant needed) ② download Release fpk → App Center manual install (data preserved)",restartConfirmTitle:"Restart Service",restartConfirmMsg:"Are you sure to restart dsh? The panel will go offline briefly and auto-recover in 15-30s.",restartSent:"Restart command sent…",restartDone:"Restart complete",restartTimeout:"Restart timed out, please refresh",fence403:"Blocked by trust fence (403)",reqFail:"Request failed: ",opFail:"Operation failed",enableQ:"Enable",disableQ:"Disable",enableConfirmTitle:"Enable Plugin",disableConfirmTitle:"Disable Plugin",enableConfirmMsg:"Enable plugin {name}? Takes effect after restarting dsh.",disableConfirmMsg:"Disable plugin {name}? It will be removed from active bundles and take effect after restarting dsh.",removeConfirmTitle:"Remove Plugin",removeConfirmMsg:"Are you sure to permanently delete {name}? It will be removed from package.json dependencies. This cannot be undone!",enableDone:"Enabled, takes effect after dsh restart",disableDone:"Disabled, takes effect after dsh restart",removeDone:"Deleted",removeDonePnpm:"Deleted (pnpm remove done)",removeDoneNo:"Deleted (pnpm unavailable, removed from bundles only)",removeFail:"Delete failed",addDone:"Installed & enabled, takes effect after dsh restart",addFail:"Install failed: ",applyConfirmTitle:"Confirm Hot Update",applyConfirmMsg:"Install this fpk update via appcenter-cli? dsh will automatically restart and the panel will be offline for about 1 minute.",applySent:"Install dispatched, App Center installing… refresh in ~1 min",applyFail:"Install failed: sudo not granted?",hotDone:"Downloaded (",dataDirLabel:"data dir",confirm:"Confirm",cancel:"Cancel"}
+zh:{title:"dsh 管理面板",status:"服务状态",version:"版本 / 更新",plugins:"插件管理",pluginsHint:"(profile: web · bundles 开关需重启 dsh 生效)",logs:"日志",restart:"重启 dsh",refreshAll:"刷新全部",refresh:"刷新",loading:"加载中…",running:"运行中",notRunning:"未运行",health:"健康检查",proxy:"proxy 网关",upstreamVer:"上游 dsh 版本",fpkVer:"fpk 版本",npmLatest:"上游官方版本 (GitHub Tag)",projectRel:"本项目最新 Release",checkUpdate:"检查更新",plugin:"插件",ver:"版本",statusTh:"状态",actions:"操作",enabled:"启用",disabled:"禁用",noPlugins:"未安装第三方插件",coreBundles:"核心 bundles: ",installPlugin:"安装插件",newpkgPh:"@scope/plugin-name 或 包名",logApp:"app.log (生命周期)",logDsh:"dsh.log (dsh 输出)",logPanel:"dashboard.log (本面板)",autoRefresh:"自动刷新(5s)",emptyLog:"(空)",isLatest:"已是最新",hasNewPre:"发现新 Tag: ",hasNewMid:" (当前安装 ",detectFail:"探测失败",downloaded:"📥 已下载: ",installUpdate:"安装更新 (appcenter-cli)",sudoHint:"若失败, 先在 NAS 授权一次性 sudo:",hotDownload:"📥 一键下载到 NAS",hotHint:"下载对应架构 fpk (GitHub 直链)",downloading:"下载中… (约 120MB, GitHub 直链请耐心等待)",updateWays:"更新方式: ① 面板一键下载 (GitHub 直链) → 安装更新 (需一次性 sudo 授权) ② 下载 GitHub Release fpk → 应用中心手动安装 (数据区保留)",restartConfirmTitle:"确认重启服务",restartConfirmMsg:"确定要重启 dsh 吗？管理面板会短暂离线，约 15~30 秒后自动恢复连接。",restartSent:"重启指令已发送…",restartDone:"重启完成",restartTimeout:"重启超时, 请刷新页面检查",fence403:"被信任围栏拒绝 (403)",reqFail:"请求失败: ",opFail:"操作失败",enableQ:"启用",disableQ:"禁用",enableConfirmTitle:"启用插件确认",disableConfirmTitle:"禁用插件确认",enableConfirmMsg:"确定要启用插件 {name} 吗？修改配置后需重启 dsh 才能生效。",disableConfirmMsg:"确定要禁用插件 {name} 吗？禁用后此插件将被移出活动 bundles，需重启 dsh 生效。",removeConfirmTitle:"删除插件确认",removeConfirmMsg:"确定要彻底删除插件 {name} 吗？将从 profiles/web/package.json 彻底移除并清理依赖。此操作无法撤销！",enableDone:"已启用, 重启 dsh 生效",disableDone:"已禁用, 重启 dsh 生效",removeDone:"已删除",removeDonePnpm:"已删除 (pnpm remove 完成)",removeDoneNo:"已删除 (pnpm 不可用, 仅移出 bundles)",removeFail:"删除失败",addDone:"已安装并启用, 重启 dsh 生效",addFail:"安装失败: ",applyConfirmTitle:"确认热更新安装",applyConfirmMsg:"确定使用 appcenter-cli 覆盖安装此版本吗？安装期间系统会自动重启 dsh 服务，管理面板将短暂离线约 1 分钟。",applySent:"安装指令已下发, App Center 安装中… 约 1 分钟后刷新页面",applyFail:"安装失败: 可能未授权 sudo",hotDone:"已下载 (",dataDirLabel:"数据区",confirm:"确定",cancel:"取消"},
+en:{title:"dsh Admin Panel",status:"Service Status",version:"Version / Update",plugins:"Plugin Management",pluginsHint:"(profile: web · bundle toggles take effect after dsh restart)",logs:"Logs",restart:"Restart dsh",refreshAll:"Refresh all",refresh:"Refresh",loading:"Loading…",running:"Running",notRunning:"Not running",health:"Health check",proxy:"proxy gateway",upstreamVer:"Upstream dsh version",fpkVer:"fpk version",npmLatest:"Upstream Official (GitHub Tag)",projectRel:"Latest project Release",checkUpdate:"Check update",plugin:"Plugin",ver:"Version",statusTh:"Status",actions:"Actions",enabled:"Enabled",disabled:"Disabled",noPlugins:"No third-party plugins installed",coreBundles:"Core bundles: ",installPlugin:"Install plugin",newpkgPh:"@scope/plugin-name or package name",logApp:"app.log (lifecycle)",logDsh:"dsh.log (dsh output)",logPanel:"dashboard.log (panel)",autoRefresh:"Auto refresh (5s)",emptyLog:"(empty)",isLatest:"Up to date",hasNewPre:"New tag found: ",hasNewMid:" (installed ",detectFail:"Not detected",downloaded:"📥 Downloaded: ",installUpdate:"Install update (appcenter-cli)",sudoHint:"If it fails, grant one-time sudo on the NAS first:",hotDownload:"📥 Download to NAS",hotHint:"Download arch-matched fpk (GitHub direct)",downloading:"Downloading… (~120MB, GitHub direct — please be patient)",updateWays:"Update paths: ① panel download (GitHub direct) → Install update (one-time sudo grant needed) ② download GitHub Release fpk → App Center manual install (data preserved)",restartConfirmTitle:"Restart Service",restartConfirmMsg:"Are you sure to restart dsh? The panel will go offline briefly and auto-recover in 15-30s.",restartSent:"Restart command sent…",restartDone:"Restart complete",restartTimeout:"Restart timed out, please refresh",fence403:"Blocked by trust fence (403)",reqFail:"Request failed: ",opFail:"Operation failed",enableQ:"Enable",disableQ:"Disable",enableConfirmTitle:"Enable Plugin",disableConfirmTitle:"Disable Plugin",enableConfirmMsg:"Enable plugin {name}? Takes effect after restarting dsh.",disableConfirmMsg:"Disable plugin {name}? It will be removed from active bundles and take effect after restarting dsh.",removeConfirmTitle:"Remove Plugin",removeConfirmMsg:"Are you sure to permanently delete {name}? It will be removed from package.json dependencies. This cannot be undone!",enableDone:"Enabled, takes effect after dsh restart",disableDone:"Disabled, takes effect after dsh restart",removeDone:"Deleted",removeDonePnpm:"Deleted (pnpm remove done)",removeDoneNo:"Deleted (pnpm unavailable, removed from bundles only)",removeFail:"Delete failed",addDone:"Installed & enabled, takes effect after dsh restart",addFail:"Install failed: ",applyConfirmTitle:"Confirm Hot Update",applyConfirmMsg:"Install this fpk update via appcenter-cli? dsh will automatically restart and the panel will be offline for about 1 minute.",applySent:"Install dispatched, App Center installing… refresh in ~1 min",applyFail:"Install failed: sudo not granted?",hotDone:"Downloaded (",dataDirLabel:"data dir",confirm:"Confirm",cancel:"Cancel"}
 };
 let LANG=localStorage.getItem("dsh-lang")||((navigator.language||"").toLowerCase().indexOf("zh")===0?"zh":"en");
 function t(k){const d=I18N[LANG]||I18N.zh;return d[k]!==undefined?d[k]:(I18N.zh[k]!==undefined?I18N.zh[k]:k)}
