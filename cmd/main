@@ -132,16 +132,27 @@ start_dsh() {
             fi
         fi
     fi
-    # 写入 cordis.patch.yml: 覆盖 webserver 绑 0.0.0.0 (允许局域网/Tailscale 直连)
-    # dsh CLI --host 0.0.0.0 会被 web-startup 插件拒绝; patch 层优先级更高, 绕过校验
-    cat > "${DSH_HOME}/profiles/web/cordis.patch.yml" <<PATCHEOF
-# 覆盖 webserver 配置: 绑定 0.0.0.0 允许局域网/Tailscale 直接访问 (绕过 CLI 安全校验)
-- id: webserver
-  config:
-    host: "0.0.0.0"
-    port: ${DSH_PORT}
-PATCHEOF
-    chmod 644 "${DSH_HOME}/profiles/web/cordis.patch.yml" 2>/dev/null
+    # 幂等维护 cordis.patch.yml 的 webserver 区域, 保留文件里其它 patch 条目.
+    # 旧实现用 cat > 整文件覆盖, 每次 start/restart 都抹掉用户追加的其它块 → 配置丢失.
+    # 现用 sed 整块替换 webserver 区域:
+    #   1) 删掉旧的 webserver 块 (范围从 "- id: webserver" 到下一个顶层列表项之前;
+    #      块边界是任何以 "- " 开头的行 (id:/insert:/... 都算), 该结束行本身保留)
+    #   2) 追加规范化的 webserver 块 (host 固定 0.0.0.0, port 取 DSH_PORT)
+    # 其余内容 (其它块 / 注释) 原样保留; webserver 区域内的自定义键会被整块替换掉.
+    # dsh CLI --host 0.0.0.0 会被 web-startup 插件拒绝; patch 层优先级更高, 绕过校验.
+    PATCH_YML="${DSH_HOME}/profiles/web/cordis.patch.yml"
+    [ -f "${PATCH_YML}" ] || : > "${PATCH_YML}"
+    # 步骤 1: 删除旧 webserver 区域 (含首行; 范围结束行是下一个顶层 "- " 项, 保留).
+    # 边界用 "^-\ " 而非 "^- id:": patch 里还有 - insert: 等其它顶层项的写法.
+    sed -i -E '/^- id: ["'"'"']?webserver["'"'"']?$/,/^- /{/^- id: ["'"'"']?webserver["'"'"']?$/d; /^- /!d}' "${PATCH_YML}"
+    # 步骤 2: 追加规范化的 webserver 块
+    {
+        printf -- '- id: webserver\n'
+        printf '  config:\n'
+        printf '    host: "0.0.0.0"\n'
+        printf '    port: %s\n' "${DSH_PORT}"
+    } >> "${PATCH_YML}"
+    chmod 644 "${PATCH_YML}" 2>/dev/null
     # 构建 /api browser-trust fence 的 trusted-host 列表:
     # dsh 只信任回环地址或 --trusted-host 声明的 authority, 否则局域网访问 API 全 403.
     # 把本机所有非回环 IPv4 (局域网/Tailscale 等) 都加入信任, 允许从这些地址直连访问 API.
