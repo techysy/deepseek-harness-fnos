@@ -37,22 +37,14 @@
 
 ## 架构
 
-```mermaid
-flowchart LR
-    U1["fnOS 桌面图标<br/>iframe / 新标签页"] --> F
-    U2["局域网<br/>Tailscale<br/>NAS_IP:28000"] --> F
-    U3["FN Connect<br/>dsh.FN_ID.fnos.net"] --> F
-    F{"信任围栏<br/>校验 Host<br/>与 Origin"} -- 放行 --> D["dsh web<br/>0.0.0.0:28000"]
-    F -. 其余来源 .-> X["403"]
-    U4["管理面板<br/>NAS_IP:28001"] -- 同一信任面 --> P["dashboard.js<br/>状态 · 日志 · 插件<br/>版本 · 热更新"]
-    P -- 重启 --> D
-    D --> H[("数据区 dsh_home<br/>.env · profiles<br/>proxy.conf<br/>trusted_hosts.conf")]
-    D --> N["依赖应用<br/>nodejs_v24<br/>bunjs"]
-    PAD["&nbsp;<br/>&nbsp;"]
-    N ~~~ PAD
+<div align="center">
 
-    style PAD fill:transparent,stroke:none,color:transparent
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/architecture.svg">
+  <img src="docs/architecture-light.svg" width="860" alt="DeepSeek Harness 架构">
+</picture>
+
+</div>
 
 ## 功能
 
