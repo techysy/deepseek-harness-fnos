@@ -48,6 +48,10 @@ flowchart LR
     P -- 重启 --> D
     D --> H[("数据区 dsh_home<br/>.env · profiles<br/>proxy.conf<br/>trusted_hosts.conf")]
     D --> N["依赖应用<br/>nodejs_v24<br/>bunjs"]
+    PAD["&nbsp;<br/>&nbsp;"]
+    N ~~~ PAD
+
+    style PAD fill:transparent,stroke:none,color:transparent
 ```
 
 ## 功能
