@@ -59,6 +59,22 @@ else
     echo "[$(date '+%F %T')] offline dsh package OK: ${DSH_OFFLINE}" >> "${LOG}"
 fi
 
+# Web 终端适配: 服务账号登录 shell 修正 (与 install_callback 一致, 幂等)
+# 0.1.7 web 侧边栏终端按 passwd 登录 shell spawn PTY, nologin 服务账号会立即退出.
+if id "${APP_NAME}" >/dev/null 2>&1; then
+    CUR_SHELL="$(getent passwd "${APP_NAME}" | cut -d: -f7)"
+    case "${CUR_SHELL}" in
+        */nologin|*/false)
+            usermod -s /bin/bash "${APP_NAME}" 2>/dev/null \
+                && echo "[$(date '+%F %T')] web terminal: ${APP_NAME} shell ${CUR_SHELL} -> /bin/bash" >> "${LOG}" \
+                || echo "[$(date '+%F %T')] WARN: usermod -s /bin/bash ${APP_NAME} failed (手动修复: sudo usermod -s /bin/bash ${APP_NAME})" >> "${LOG}"
+            ;;
+        *)
+            echo "[$(date '+%F %T')] web terminal: ${APP_NAME} shell=${CUR_SHELL} (ok)" >> "${LOG}"
+            ;;
+    esac
+fi
+
 # 应用 settings 前端 patch (memory->host), 与 install_callback 一致, 幂等
 PATCH_SCRIPT="$(dirname "$0")/patch_settings_memory.py"
 if [ -f "${PATCH_SCRIPT}" ]; then

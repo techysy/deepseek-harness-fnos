@@ -137,6 +137,24 @@ else
     echo "[$(date '+%F %T')] WARN: patch script not found at ${PATCH_SCRIPT}" >> "${LOG}"
 fi
 
+# ── Web 终端适配: 服务账号登录 shell 修正 (0.1.7 侧边栏终端) ──
+# 0.1.7 起 web 侧边栏终端按系统用户的 passwd 登录 shell spawn PTY; fnOS 服务账号
+# 默认 shell=/usr/sbin/nologin, 终端打开即 "This account is currently not available."
+# 退出 (exit 1). 改为 /bin/bash (服务账号无密码登录面, 无安全面扩大).
+if id "${APP_NAME}" >/dev/null 2>&1; then
+    CUR_SHELL="$(getent passwd "${APP_NAME}" | cut -d: -f7)"
+    case "${CUR_SHELL}" in
+        */nologin|*/false)
+            usermod -s /bin/bash "${APP_NAME}" 2>/dev/null \
+                && echo "[$(date '+%F %T')] web terminal: ${APP_NAME} shell ${CUR_SHELL} -> /bin/bash" >> "${LOG}" \
+                || echo "[$(date '+%F %T')] WARN: usermod -s /bin/bash ${APP_NAME} failed (web 终端将不可用; 手动修复: sudo usermod -s /bin/bash ${APP_NAME})" >> "${LOG}"
+            ;;
+        *)
+            echo "[$(date '+%F %T')] web terminal: ${APP_NAME} shell=${CUR_SHELL} (ok)" >> "${LOG}"
+            ;;
+    esac
+fi
+
 # ── 检测 g++/编译工具链 (node-pty 等 native 模块如需重建时依赖) ──
 # dsh 含原生模块 (node-pty 等), 若离线包在低 glibc 环境构建且 NAS 需要重建, 缺 g++ 会静默失败.
 # 这里主动检测并在缺失时给出清晰提示, 避免"安装成功但 dsh 起不来"的困惑.
