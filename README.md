@@ -69,6 +69,9 @@
 - dsh 的 Agent / bash 工具可直接使用 `node` / `npm` / `npx` / `pnpm` / `yarn` / `corepack` / `bun`（来自依赖应用，启动时自动加入 PATH；见 [Agent 环境命令](#agent-环境命令)）
 - npm 全局安装与 corepack 缓存都指向数据区，不占系统盘
 
+**官方插件兼容**
+- **语音输入（实验性）**：官方 `@deepseek-ai/dsh-experimental-voice-input-bundle`（本地 SenseVoice 转写）在 fpk 下完整可用 —— 模型下载走 `proxy.conf` 代理，麦克风走 FN Connect HTTPS 入口或浏览器标志位启用；实测记录与局域网方案见 [语音输入插件兼容指南](docs/dsh-voice-input.md)
+
 ## 快速开始
 
 ### 安装
@@ -126,7 +129,7 @@
 | --- | --- |
 | **服务状态** | dsh web 进程 / 健康检查 / 运行时长、网关代理、fpk 与已装 dsh 版本、数据区路径 |
 | **日志查看** | `app.log`（生命周期）/ `dsh.log`（dsh 输出）/ `dashboard.log`（面板），tail 尾部 + 5 秒自动刷新 |
-| **插件管理** | 第三方插件**禁用 / 启用 / 删除 / 安装**（改 `profiles/web/package.json` 的 bundles，重启 dsh 生效）；插件不兼容导致 dsh 启动崩溃循环时可在此快速禁用 |
+| **插件管理** | 第三方插件与**官方实验性插件**（`@deepseek-ai/dsh-experimental-*`，如语音输入）**禁用 / 启用 / 删除 / 安装**（改 `profiles/web/package.json` 的 bundles，重启 dsh 生效）；官方插件安装时自动钉到已装 dsh 版本（该作用域 npm `latest` 可能指向 alpha），默认源失败回退 npmmirror；插件不兼容导致 dsh 启动崩溃循环时可在此快速禁用 |
 | **版本检查** | 上游版本优先取 GitHub `deepseek-ai/deepseek-harness` 的 Release Tag，取不到回退 npmmirror / npmjs；本项目最新 Release 优先 GitHub、Gitee 兜底 |
 | **一键重启 dsh** | 经 `cmd/main restart` 执行，面板自身不受影响 |
 | **📥 一键更新** | 从 GitHub 直链下载本机架构的 iframe 变体 fpk 到数据区 `dsh_home/update/`，再点「安装更新」经 `appcenter-cli install-fpk` 完成安装与重启 |
@@ -307,10 +310,12 @@ bash scripts/package-arm-offline.sh node_modules-arm64-<sha>.tar.gz  # ARM：用
 - [ARM 打包](docs/arm-build.md)
 - [dsh Node.js 自托管](docs/dsh-nodejs.md) — node / npm 基础接入
 - [dsh Agent 命令兼容矩阵](docs/dsh-nodejs-commands.md) — node / npm / npx / pnpm / yarn / bun / corepack 完整命令与数据区配置
+- [语音输入插件兼容指南](docs/dsh-voice-input.md) — 官方 SenseVoice 语音输入安装、模型代理 / 离线部署、麦克风安全上下文与局域网方案
 
 ## 已知限制
 
 - 28000 / 28001 除信任围栏外没有登录鉴权（浏览器 token 鉴权已被补丁关闭），只适合局域网 / FN Connect 使用，请勿直接暴露到公网
+- 语音输入插件在**局域网 HTTP 直连**时无法录音 —— 浏览器只在 HTTPS / localhost 开放麦克风（与封装无关的安全上下文限制，FN Connect 外网 HTTPS 不受影响）；局域网方案见 [语音输入插件兼容指南](docs/dsh-voice-input.md)
 - fnOS 统一网关 `/app/dsh` 未打通，请用 28000 直连、FN Connect 或自定义域名访问
 - 上游仍是开发者预览版（`-rc`），本地补丁依赖上游代码的特定写法，上游改动后可能失效，需按检查清单核对
 - 已发布的 `v0.1.7-rc.2` fpk 中，Web 侧边栏终端可能因服务账号登录 shell 为 `nologin` 而打开即退出（提示 `This account is currently not available.`）；修复已在 main 分支，下个版本生效，现在可手动执行 `sudo usermod -s /bin/bash dsh`

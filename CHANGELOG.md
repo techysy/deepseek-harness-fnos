@@ -14,6 +14,7 @@
 ### 🛠️ fpk 变更（本地）
 - **CI 自动发布**：`build-fpk.yml` 新增 `release_tag` 输入，打包完成自动创建/补传 GitHub Release 资产（`--clobber` 幂等，双架构共用同一 Release）
 - **面板热更新适配**：下载源 Gitee→GitHub 直链优先（含 prerelease 语义与 Gitee 升序列表两处修复），体积提示更新为约 120MB
+- **官方语音输入插件兼容**（实测通过）：面板插件管理放行官方实验性插件 `@deepseek-ai/dsh-experimental-*`（此前被归为核心 bundles 不可禁用/删除）；面板安装官方插件自动钉到已装 dsh 版本（该作用域 npm `latest` 标签指向 alpha，直接装会版本错配）+ 默认源失败回退 npmmirror；模型下载经 `proxy.conf` 代理实测可过（插件全局 fetch 走 dsh 的 undici 全局 dispatcher）；新增 [语音输入插件兼容指南](docs/dsh-voice-input.md)（安装 / 模型代理与离线部署 / 麦克风安全上下文 / 故障排查）
 - Release 不再标记 prerelease，保证 `/releases/latest` 直链可用（0.1.7-rc.1 已回溯修正）
 
 ### ⚠️ 升级注意
