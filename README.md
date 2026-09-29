@@ -109,7 +109,7 @@
 
 > fnOS 统一网关 `/app/dsh`（`app.sock` → `cmd/proxy.py` → `127.0.0.1:28000`）**未打通**：`proxy.py` 仍会随应用启动，但网关路由登录后返回 Not Found，请使用上表入口。调查过程见 [docs/dsh-access-and-gateway.md](docs/dsh-access-and-gateway.md)。
 
-**安全机制**（0.1.7-rc.2 现状，补丁均为幂等，每次启动 / 安装时自动检查）：
+**安全机制**（0.2.0-rc.2 现状，补丁均为幂等，每次启动 / 安装时自动检查）：
 
 | 机制 | 实现 | 说明 |
 | --- | --- | --- |
@@ -318,7 +318,7 @@ bash scripts/package-arm-offline.sh node_modules-arm64-<sha>.tar.gz  # ARM：用
 - 语音输入插件在**局域网 HTTP 直连**时无法录音 —— 浏览器只在 HTTPS / localhost 开放麦克风（与封装无关的安全上下文限制，FN Connect 外网 HTTPS 不受影响）；局域网方案见 [语音输入插件兼容指南](docs/dsh-voice-input.md)
 - fnOS 统一网关 `/app/dsh` 未打通，请用 28000 直连、FN Connect 或自定义域名访问
 - 上游仍是开发者预览版（`-rc`），本地补丁依赖上游代码的特定写法，上游改动后可能失效，需按检查清单核对
-- 已发布的 `v0.1.7-rc.2` fpk 中，Web 侧边栏终端可能因服务账号登录 shell 为 `nologin` 而打开即退出（提示 `This account is currently not available.`）；修复已在 main 分支，下个版本生效，现在可手动执行 `sudo usermod -s /bin/bash dsh`
+- `v0.1.7-rc.2` 及更早的 fpk 中，Web 侧边栏终端可能因服务账号登录 shell 为 `nologin` 而打开即退出（提示 `This account is currently not available.`）；0.2.0-rc.2 起安装脚本自动修正，老版本可手动执行 `sudo usermod -s /bin/bash dsh`
 - 桌面打开出现 `dsh web authentication required` 401（启动补丁在个别环境没打上）时，SSH 到 NAS 执行热修脚本后在应用中心重启 dsh：
   ```bash
   curl -sL https://gitee.com/techysy/deepseek-harness-fnos/raw/main/scripts/fix-browser-auth-401.sh | sudo bash
