@@ -5,8 +5,8 @@
  * 零依赖单文件, 由 cmd/main 启动 (也可手动 node dashboard.js).
  * 功能: 服务状态 / dsh 日志查看 / 插件管理 (bundles 禁用启用删除) /
  *       版本检查 (上游 dsh + 本项目 Release) / 重启 dsh.
- * 安全: Host/Origin 信任围栏 (与 dsh 一致: 回环 + 本机 IP + fnos.net
- *       + trusted_hosts.conf), 围栏外一律 403. 勿暴露到不受信网络.
+ * 安全: Host/Origin 信任围栏 (与 dsh 一致: 回环 + 本机 IP + fnos.net /
+ *       5ddd.com + trusted_hosts.conf), 围栏外一律 403. 勿暴露到不受信网络.
  */
 "use strict";
 const http = require("http");
@@ -25,8 +25,24 @@ function detectDataDir() {
   }
   return null;
 }
+// 工作空间落点 (issue #2 收敛方案): 优先 @appshare 共享目录, 否则回退 @appdata.
+// cmd/main 以 DSH_HOME 环境变量显式传入真实 HOME, 这里只做无参启动时的兜底探测.
+function detectSharedHome(dataDir) {
+  const marker = path.join(dataDir, "dsh_home", ".migrated-to-share");
+  if (!fs.existsSync(marker)) return null;   // 未迁移 → 仍用 @appdata
+  const cands = [];
+  if (process.env.WORK_HOME) cands.push(process.env.WORK_HOME);
+  if (process.env.TRIM_DATA_SHARE_PATHS) cands.push(path.join(process.env.TRIM_DATA_SHARE_PATHS.split(":")[0], "dsh_home"));
+  const appDir = process.env.APP_DIR || "/var/apps/dsh";
+  cands.push(path.join(appDir, "share", "dsh", "dsh_home"));
+  for (const v of (() => { try { return fs.readdirSync("/").filter(d => /^vol\d+$/.test(d)); } catch { return []; } })())
+    cands.push(path.join("/", v, "@appshare/dsh/dsh_home"));
+  for (const c of cands) if (fs.existsSync(c)) return c;
+  return null;
+}
 const DATA_DIR = detectDataDir();
-const DSH_HOME = process.env.DSH_HOME || (DATA_DIR ? path.join(DATA_DIR, "dsh_home") : null);
+const DSH_HOME = process.env.DSH_HOME
+  || (DATA_DIR ? (detectSharedHome(DATA_DIR) || path.join(DATA_DIR, "dsh_home")) : null);
 const APP_DIR = process.env.APP_DIR || "/var/apps/dsh";
 const DSH_PORT = process.env.DSH_PORT || "28000";
 const DASH_PORT = process.env.DASH_PORT || "28001";
@@ -46,7 +62,8 @@ function localIps() {
   return out;
 }
 function trustedHosts() {
-  const out = new Set(["fnos.net"]);
+  // 内置两条飞牛 FN Connect 域名后缀 (issue #7); 其余来自用户的 trusted_hosts.conf
+  const out = new Set(["fnos.net", "5ddd.com"]);
   try {
     const f = path.join(DSH_HOME, "trusted_hosts.conf");
     if (fs.existsSync(f))
@@ -61,7 +78,6 @@ function hostAllowed(host) {
   if (!host) return false;
   const h = host.split(":")[0].toLowerCase();
   if (localIps().has(h)) return true;
-  if (h === "fnos.net" || h.endsWith(".fnos.net")) return true;
   for (const t of trustedHosts()) {
     if (h === t || h.endsWith("." + t)) return true;
   }

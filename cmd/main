@@ -25,9 +25,47 @@ else
     fi
 fi
 
+
+# ── 数据落点: 工作空间/会话放 @appshare, 凭据留 @appdata (issue #2 收敛方案) ──
+# 为什么拆开:
+#   @appshare 是 config/resource `data-share` 声明的"共享目录", 用户能在飞牛文件
+#   管理器里直接看到、也能 SMB 共享 (issue #2 的原始诉求 —— 随时查看/导入物料)。
+#   **代价**: 该目录使用 Windows ACL 且对用户可见, 因此凭据类文件 (.env API Key /
+#   .credentials.yaml / proxy.conf) 不能放里面, 留在 @appdata 数据区。
+#   卸载时: fnOS 会清理 @appdata/<app>, 但**不会**清理共享目录 —— 所以工作空间
+#   (会话记录、dsh 工作文件) 卸载后仍在, 凭据随应用一起清掉 (重装重填, 符合预期)。
+# 落点解析: 优先 fnOS 注入的 TRIM_DATA_SHARE_PATHS (官方推荐, 取第一个条目),
+# 否则用应用目录下的 share 软链 (/var/apps/<app>/share/<name>), 再否则回退数据区。
+SHARE_DIR=""
+fn_resolve_share() {
+    local cand
+    # ① 官方: TRIM_DATA_SHARE_PATHS 冒号分隔, 取第一个
+    if [ -n "${TRIM_DATA_SHARE_PATHS:-}" ]; then
+        cand="$(printf '%s' "${TRIM_DATA_SHARE_PATHS}" | cut -d: -f1)"
+        [ -n "${cand}" ] && SHARE_DIR="${cand}" && return 0
+    fi
+    # ② 应用目录 share 软链 (config/resource 声明名 dsh)
+    for cand in "${APP_DIR}/share/${APP_NAME}" "${APP_DIR}/share/data" "${APP_DIR}/share"; do
+        [ -d "${cand}" ] && SHARE_DIR="${cand}" && return 0
+    done
+    # ③ 兜底: 按卷推导 @appshare (声明缺失时的容错)
+    if [ -n "${APP_VOL:-}" ] && [ -d "${APP_VOL}/@appshare" ]; then
+        SHARE_DIR="${APP_VOL}/@appshare/${APP_NAME}"
+    fi
+    return 0
+}
+fn_resolve_share
+
 # 端口: dsh web 绑 0.0.0.0 (经 cordis.patch.yml 覆盖 webserver host, 绕过 CLI 安全校验)
 # 局域网/Tailscale 可直接访问 NAS_IP:28000; 同时 proxy.py 经统一网关 /app/dsh 暴露
 DSH_PORT="${TRIM_SERVICE_PORT:-28000}"
+# WORK_HOME: 工作空间/会话落点 (@appshare 内), 迁移后 dsh 的 HOME 指向它
+# HOME_DIR:  **凭据**落点 (@appdata, 不对外共享); 两者最终合成为一个 dsh_home 视图
+if [ -n "${SHARE_DIR}" ]; then
+    WORK_HOME="${SHARE_DIR}/dsh_home"
+else
+    WORK_HOME=""   # 共享目录不可用 → 走旧布局 (DATA_DIR/dsh_home)
+fi
 DSH_HOME="${DATA_DIR}/dsh_home"
 DSH_LOG="${DATA_DIR}/dsh.log"
 DSH_PID="${DATA_DIR}/dsh.pid"
@@ -67,6 +105,122 @@ done
 
 log() { echo "[$(date '+%F %T')] $*" >> "${LOG}"; }
 
+# 数据迁移: 旧布局 (全部在 @appdata/<app>/dsh_home) → 新布局:
+#   工作空间/会话 → ${WORK_HOME} (@appshare, 卸载不删、文件管理器可见)
+#   凭据类文件   → 留在 ${DSH_HOME} (@appdata, 不对外共享)
+# 一次性: 迁移成功后落标记 .migrated-to-share, 之后不再执行 (幂等).
+# 安全: 先复制再校验, 成功才移走源文件; 失败保留原样并以旧布局启动 (不清数据).
+migrate_dsh_home() {
+    # 未启用共享目录 → 保持旧布局, 什么都不做
+    [ -z "${WORK_HOME}" ] && return 1
+    # 已迁移过 → 直接走新布局
+    [ -f "${DSH_HOME}/.migrated-to-share" ] && return 0
+    # 源目录不存在 (全新安装) → 建好新布局即可
+    if [ ! -d "${DSH_HOME}" ]; then
+        mkdir -p "${WORK_HOME}" 2>/dev/null || { log "share: mkdir ${WORK_HOME} 失败, 回退旧布局"; return 1; }
+        touch "${DSH_HOME}/.migrated-to-share" 2>/dev/null || true
+        return 0
+    fi
+    # 凭据类: 留在数据区, 不随迁
+    local CREDS=".env .credentials.yaml proxy.conf trusted_hosts.conf"
+    mkdir -p "${WORK_HOME}" 2>/dev/null || { log "share: mkdir ${WORK_HOME} 失败, 回退旧布局"; return 1; }
+    log "share: 迁移 dsh_home → ${WORK_HOME} (凭据保留在 ${DSH_HOME})"
+    # 复制所有内容 (包含隐藏文件); cp 失败不立即中断, 交给下面的逐文件校验判定
+    cp -a "${DSH_HOME}/." "${WORK_HOME}/" 2>>"${LOG}" || log "share: WARN cp 返回非 0, 交给逐文件校验"
+
+    # 校验 (关键): 逐文件比对大小, 而不是只查顶层目录名.
+    # 只查目录名会在"目录建好了但里面没拷全"时误判成功 → 随后 rm -rf 源数据 → 真丢数据.
+    # 凭据类不参与校验也不需要迁移 (留在 @appdata), 但要保证目标里没有它们.
+    local missing=0 f rel sz_src sz_dst
+    while IFS= read -r f; do
+        rel="${f#"${DSH_HOME}"/}"
+        case " ${CREDS} " in *" ${rel} "*) continue;; esac
+        if [ ! -f "${WORK_HOME}/${rel}" ]; then
+            missing=1; log "share: 校验缺失 ${rel} (迁移中止, 源数据不动)"
+        else
+            sz_src="$(stat -c '%s' "${f}" 2>/dev/null || echo -1)"
+            sz_dst="$(stat -c '%s' "${WORK_HOME}/${rel}" 2>/dev/null || echo -2)"
+            [ "${sz_src}" = "${sz_dst}" ] || { missing=1; log "share: 校验大小不符 ${rel} (${sz_src}≠${sz_dst})"; }
+        fi
+    done < <(find "${DSH_HOME}" -type f ! -name '.migrated-to-share' 2>/dev/null)
+
+    if [ "${missing}" != "0" ]; then
+        # 校验失败: 保留旧布局原样启动, 不清任何源文件 (下次启动重试)
+        log "share: 迁移校验失败 → 本次回退旧布局 (源数据完好, 未删除)"
+        return 1
+    fi
+
+    # 校验通过才清理: 凭据从共享目录剔除 + 源侧移除已迁移项 (避免双份占用)
+    local c
+    for c in ${CREDS}; do rm -f "${WORK_HOME}/${c}" 2>/dev/null; done
+    local item base
+    for item in "${DSH_HOME}"/* "${DSH_HOME}"/.[!.]*; do
+        [ -e "${item}" ] || continue
+        base="$(basename "${item}")"
+        case " ${CREDS} " in *" ${base} "*) continue;; esac
+        rm -rf "${item}" 2>/dev/null
+    done
+    touch "${DSH_HOME}/.migrated-to-share" 2>/dev/null || true
+    log "share: 迁移完成 (工作空间 → ${WORK_HOME}, 凭据 → ${DSH_HOME})"
+    return 0
+}
+
+# 放宽 host-webserver 的「插件 prefix 路由」信任门 (issue #3).
+# 说明: dsh 对非回环 Host 的请求会做一道 trust 判定, 未通过者由 webserver 兜底
+# `.catch()` 转成空响应体 400 — 插件注册的 prefix 路由 (自带 HTTP 接口的插件)
+# 因此从 LAN/域名/Tailscale 入口全部取不到数据 (回环 200). 本函数幂等放宽该判定.
+# 覆盖三要素: ① 值改为从 trustedHosts 推导 ② 该列表仍受 --trusted-host 控制的
+# 宿主/回环判定不被误伤 ③ 上游若已原生支持 (>=0.2.0-rc.2 实测无) 则自动跳过.
+patch_webserver_trust() {
+    local WS_LIB="" cand
+    # 定位 @deepseek-ai/dsh-host-webserver/lib/index.js (优先相对 DSH_JS, 多路径兜底)
+    for cand in \
+        "$(dirname "$(dirname "${DSH_JS}")")/dsh-host-webserver/lib/index.js" \
+        "${APP_DIR}/target/server/node_modules/@deepseek-ai/dsh-host-webserver/lib/index.js" \
+        "${APP_DIR}/server/node_modules/@deepseek-ai/dsh-host-webserver/lib/index.js" \
+        "${APP_DIR}/node_modules/@deepseek-ai/dsh-host-webserver/lib/index.js" \
+        "${APP_VOL}/@appcenter/deepseek-harness/server/node_modules/@deepseek-ai/dsh-host-webserver/lib/index.js" \
+        "${APP_VOL}/@appcenter/dsh/server/node_modules/@deepseek-ai/dsh-host-webserver/lib/index.js" \
+        /var/apps/nodejs_v24/target/lib/node_modules/@deepseek-ai/dsh-host-webserver/lib/index.js; do
+        [ -f "$cand" ] && WS_LIB="$cand" && break
+    done
+    if [ -z "${WS_LIB}" ]; then
+        log "webserver-trust patch: SKIP (dsh-host-webserver/lib/index.js 未找到 — 该版本可能无 prefix 路由门)"
+        return 0
+    fi
+    local out
+    out=$("${NODE_BIN:-node}" -e '
+const fs = require("fs");
+const p = process.argv[1];
+let s = fs.readFileSync(p, "utf8");
+const MARK = "dsh-fnos";
+if (s.includes("/* dsh-fnos:")) { process.stdout.write("already patched"); process.exit(0); }
+// 命中「非回环即拒」的信任判定: 形如
+//   if (!isTrustedApiRequest(request, [])) return ...403/400
+//   const trusted = host ? [] : this.trustedHosts
+// 这里只做保守的、可核验的替换: 把该文件内作为「拒绝依据」的空列表 [] 改为
+// trustedHosts (该文件已从 options 解构 trustedHosts, 存在同名绑定).
+let changed = 0;
+const reps = [
+  ["isTrustedApiRequest(request, [])", "isTrustedApiRequest(request, this.trustedHosts || [])"],
+  ["!isTrustedApiRequest(req, [])", "!isTrustedApiRequest(req, this.trustedHosts || [])"],
+];
+for (const [o, n] of reps) {
+  const c = s.split(o).length - 1;
+  if (c > 0 && !s.includes(n)) { s = s.split(o).join(n); changed += c; }
+}
+if (changed) {
+  if (s.includes("/* dsh-fnos:")) {} else s = s.replace(/^/,
+    "/* dsh-fnos: relax webserver prefix-route trust gate to trustedHosts (issue #3) */\n");
+  fs.writeFileSync(p, s);
+  process.stdout.write("patched (" + changed + " site)");
+} else {
+  process.stdout.write("no pattern matched (upstream layout changed? 需人工核对 trust 判定)");
+}
+' "${WS_LIB}" 2>&1)
+    log "webserver-trust patch: ${out:-no output} @ ${WS_LIB}"
+}
+
 # 寻找 dsh 可执行; 无 bin 链接时用 node 直接运行 dsh 的 bin.js (优先离线包)
 find_dsh_bin() {
     local cand
@@ -99,25 +253,43 @@ start_dsh() {
         fuser -k -9 "${DSH_PORT}/tcp" 2>/dev/null || true
         sleep 1
     fi
-    # 初始化 DSH_HOME
-    mkdir -p "${DSH_HOME}/profiles/web" "${DSH_HOME}/logs" 2>/dev/null
+    # 数据落点切换 (issue #2): 工作空间/会话迁到 @appshare, 凭据留 @appdata.
+    # 失败时 HOME_DIR 回退 DSH_HOME → 行为与旧版完全一致 (不清数据、不影响启动).
+    local HOME_DIR="${DSH_HOME}"
+    if [ -n "${WORK_HOME}" ] && migrate_dsh_home; then
+        HOME_DIR="${WORK_HOME}"
+        # 凭据在 @appdata: 用软链把它们接进共享 HOME, 使 dsh 仍从同一 HOME 读到
+        # .env / proxy.conf / trusted_hosts.conf, 而真实文件不落在用户可见目录.
+        local cred
+        for cred in .env .credentials.yaml proxy.conf trusted_hosts.conf; do
+            if [ -e "${DSH_HOME}/${cred}" ]; then
+                [ -e "${HOME_DIR}/${cred}" ] || ln -sf "${DSH_HOME}/${cred}" "${HOME_DIR}/${cred}" 2>/dev/null || true
+            fi
+        done
+        log "share: 使用共享工作空间 HOME=${HOME_DIR} (凭据软链自 ${DSH_HOME})"
+    fi
+    # 初始化 HOME (共享工作空间或旧数据区)
+    mkdir -p "${HOME_DIR}/profiles/web" "${HOME_DIR}/logs" 2>/dev/null
     # 权限自愈: dsh 强制安全要求 .credentials.yaml / .env 必须是 mode 600 (只属主可读写),
     # 否则抛 credentials-local: is readable beyond its owner (mode 770) 拒不启动.
+    # 注意: 真实凭据在 @appdata (上), 共享目录里可能是软链; 两处都收紧权限.
     chmod 600 "${DSH_HOME}/.credentials.yaml"* "${DSH_HOME}/.env" 2>/dev/null || true
+    chmod 600 "${HOME_DIR}/.credentials.yaml"* "${HOME_DIR}/.env" 2>/dev/null || true
     # 确保隐藏文件若被 root 误调试创建时属主归还给当前用户 (防 chokidar EACCES)
-    if [ "$(id -u)" != "0" ] && [ -f "${DSH_HOME}/.gitconfig" ] && [ ! -r "${DSH_HOME}/.gitconfig" ]; then
-        chmod 644 "${DSH_HOME}/.gitconfig" 2>/dev/null || true
+    if [ "$(id -u)" != "0" ] && [ -f "${HOME_DIR}/.gitconfig" ] && [ ! -r "${HOME_DIR}/.gitconfig" ]; then
+        chmod 644 "${HOME_DIR}/.gitconfig" 2>/dev/null || true
     fi
     # dsh 用 os.homedir() 作为工作目录, 默认 /home/dsh 不存在会导致 ENOENT.
-    # 确保存在且可写, 并把 HOME 指向 DSH_HOME (数据区, 可持久).
-    if [ "${HOME:-}" != "${DSH_HOME}" ]; then
-        export HOME="${DSH_HOME}"
+    # 确保存在且可写, 并把 HOME 指向共享工作空间 (卸载不删、文件管理器可见).
+    if [ "${HOME:-}" != "${HOME_DIR}" ]; then
+        export HOME="${HOME_DIR}"
     fi
     mkdir -p "${HOME}" 2>/dev/null
     if [ -n "${TRIM_PKGVAR:-}" ]; then
         mkdir -p "/home/${APP_NAME}" 2>/dev/null || true
     fi
     # 网络代理: 默认不走代理. 仅当用户在 ${DSH_HOME}/proxy.conf 显式配置了 PROXY 才走代理.
+    # (proxy.conf 始终在 @appdata 数据区, 不随工作空间迁移 — 属凭据类配置)
     # proxy.conf 内容示例:  PROXY=http://127.0.0.1:7890   (HTTP_PROXY/HTTPS_PROXY 都指向它)
     if [ -z "${HTTP_PROXY:-}" ] && [ -z "${http_proxy:-}" ]; then
         if [ -f "${DSH_HOME}/proxy.conf" ]; then
@@ -134,14 +306,93 @@ start_dsh() {
     fi
     # 写入 cordis.patch.yml: 覆盖 webserver 绑 0.0.0.0 (允许局域网/Tailscale 直连)
     # dsh CLI --host 0.0.0.0 会被 web-startup 插件拒绝; patch 层优先级更高, 绕过校验
-    cat > "${DSH_HOME}/profiles/web/cordis.patch.yml" <<PATCHEOF
+    #
+    # ⚠️ 上游 0.1.7+ 起 UI 的设置也写进本文件 (不再有 settings.yaml), 而本函数
+    # 在每次 start 都会执行。若无条件整文件覆盖, 用户在 UI 里的任何变更都会在
+    # 下次重启时丢失 (issue #5)。因此这里改为**幂等 upsert**:
+    #   - 只增改 id: webserver 的 host/port 两行, 其余内容 (用户/其他插件的配置) 原样保留
+    #   - YAML 键按 id 对齐 (首行裸 `- ` 缩进 0), 与上游生成格式一致, 避免结构错位
+    #   - python3 不可用时回退为原整文件写入 (宁可丢失也不让服务起不来)
+    CORDIS_PATCH="${DSH_HOME}/profiles/web/cordis.patch.yml"
+    if [ -f "${CORDIS_PATCH}" ] && grep -qE '^[[:space:]]*-[[:space:]]*id:[[:space:]]*["'"'"']?webserver' "${CORDIS_PATCH}" 2>/dev/null \
+        && command -v python3 >/dev/null 2>&1; then
+        CORDIS_PATCH="${CORDIS_PATCH}" DSH_PORT="${DSH_PORT}" /usr/bin/env python3 - <<'PATCHYML'
+import os, re
+p = os.environ["CORDIS_PATCH"]
+port = os.environ["DSH_PORT"]
+lines = open(p, encoding="utf-8").read().splitlines(keepends=True)
+# 定位 `- id: webserver` 块 (缩进 0 的列表项), 到下一个同级 `- ` 为止
+start = end = None
+for i, ln in enumerate(lines):
+    if re.match(r'^[ \t]*-[ \t]*id:[ \t]*["\']?webserver["\']?[ \t]*$', ln.rstrip("\r\n")):
+        start = i
+        j = i + 1
+        while j < len(lines) and not re.match(r'^[ \t]*-[ \t]', lines[j]):
+            j += 1
+        end = j
+        break
+if start is None:
+    raise SystemExit(0)  # 调用方回退整文件写入
+block = lines[start:end]
+def indent_of(line):
+    return re.match(r'^[ \t]*', line).group(0)
+cfg = next((k for k, ln in enumerate(block)
+            if re.match(r'^[ \t]*config:[ \t]*$', ln)), None)
+if cfg is None:                       # 该块没有 config: → 补一行
+    block.append(indent_of(block[0]) + "  config:\n")
+    cfg = len(block) - 1
+v_ind = indent_of(block[cfg]) + "  "
+def upsert(key, value):
+    for k in range(cfg + 1, len(block)):
+        if re.match(r'^[ \t]*' + key + r':[ \t]', block[k]):
+            block[k] = "{} {}: \"{}\"\n".format(v_ind, key, value)
+            return
+    insert_at = len(block)
+    for k in range(cfg + 1, len(block)):
+        if re.match(r'^[ \t]*[\w-]+:[ \t]', block[k]):
+            insert_at = k + 1
+    if insert_at == len(block) and block and not block[-1].endswith("\n"):
+        block[-1] += "\n"
+    block.insert(insert_at, "{} {}: \"{}\"\n".format(v_ind, key, value))
+upsert("host", "0.0.0.0")
+upsert("port", port)
+# 归一化 webserver 块缩进 (2/4 空格), 保持文件整洁且与上游生成格式一致
+for k, ln in enumerate(block):
+    m = re.match(r'^([ \t]*)([\w-]+):(.*)$', ln.rstrip("\r\n"))
+    if not m:
+        continue
+    if k == 0:
+        block[k] = "- {}:{}\n".format(m.group(2), m.group(3))
+    elif m.group(2) == "config":
+        block[k] = "  config:{}\n".format(m.group(3))
+    else:
+        block[k] = "    {}:{}\n".format(m.group(2), m.group(3))
+lines[start:end] = block
+open(p, "w", encoding="utf-8").write("".join(lines))
+PATCHYML
+        if [ $? -ne 0 ]; then
+            log "cordis.patch.yml: webserver 块 upsert 失败, 回退整文件写入"
+            cat > "${CORDIS_PATCH}" <<PATCHEOF
 # 覆盖 webserver 配置: 绑定 0.0.0.0 允许局域网/Tailscale 直接访问 (绕过 CLI 安全校验)
 - id: webserver
   config:
     host: "0.0.0.0"
     port: ${DSH_PORT}
 PATCHEOF
-    chmod 644 "${DSH_HOME}/profiles/web/cordis.patch.yml" 2>/dev/null
+        else
+            log "cordis.patch.yml: webserver host/port 已 upsert (保留 UI 既有配置)"
+        fi
+    else
+        # 首次启动 (文件不存在) 或文件里没有 webserver 条目: 整文件写入基础内容
+        cat > "${CORDIS_PATCH}" <<PATCHEOF
+# 覆盖 webserver 配置: 绑定 0.0.0.0 允许局域网/Tailscale 直接访问 (绕过 CLI 安全校验)
+- id: webserver
+  config:
+    host: "0.0.0.0"
+    port: ${DSH_PORT}
+PATCHEOF
+    fi
+    chmod 644 "${CORDIS_PATCH}" 2>/dev/null
     # 构建 /api browser-trust fence 的 trusted-host 列表:
     # dsh 只信任回环地址或 --trusted-host 声明的 authority, 否则局域网访问 API 全 403.
     # 把本机所有非回环 IPv4 (局域网/Tailscale 等) 都加入信任, 允许从这些地址直连访问 API.
@@ -153,8 +404,9 @@ PATCHEOF
     for ip in ${LAN_IPS}; do
         TRUSTED_HOST_VALUES="${TRUSTED_HOST_VALUES} ${ip}"
     done
-    # 内置默认 trusted-host: fnos.net (FN Connect 域名) + 本机非回环 IP.
-    TRUSTED_HOST_VALUES="${TRUSTED_HOST_VALUES} fnos.net"
+    # 内置默认 trusted-host: fnos.net / 5ddd.com (飞牛两条 FN Connect 域名后缀, issue #7)
+    # + 本机非回环 IP. 两者都后缀匹配生效, 无需用户手动填。
+    TRUSTED_HOST_VALUES="${TRUSTED_HOST_VALUES} fnos.net 5ddd.com"
     # 读取用户配置的 FN Connect 域名 (FN ID), 每行一个, 追加.
     # 配置在 ${DSH_HOME}/trusted_hosts.conf, 与 proxy.conf 机制一致; # 开头为注释.
     # 自动清理: 去掉 http(s):// 前缀与结尾 /, 否则非法条目会让整个 trustedHosts 加载失败 → 全 403.
@@ -278,19 +530,19 @@ else console.log("WARNING: no pattern matched (upstream code changed?)");
                     *":${cand}:"*) : ;;
                     *) export PATH="${cand}:${PATH}" ;;
                 esac
-                # 固定 pnpm 版本 + 缓存目录放数据区 (避免每次重下, 也避免占用系统盘)
-                export COREPACK_HOME="${DSH_HOME}/.corepack" 2>/dev/null || true
+                # 固定 pnpm 版本 + 缓存目录放 HOME (避免每次重下, 也避免占用系统盘)
+                export COREPACK_HOME="${HOME_DIR}/.corepack" 2>/dev/null || true
                 export COREPACK_DEFAULT_TO_LATEST=0
-                log "corepack shims: ${cand} (pnpm available, COREPACK_HOME=${DSH_HOME}/.corepack)"
+                log "corepack shims: ${cand} (pnpm available, COREPACK_HOME=${HOME_DIR}/.corepack)"
                 break
             fi
         done
-        # npm 全局 prefix 指向数据区: 避免读到 /home/<user>/.npmrc 的 prefix 导致
+        # npm 全局 prefix 指向 HOME: 避免读到 /home/<user>/.npmrc 的 prefix 导致
         # "config prefix cannot be changed from project config" 且全局安装落系统盘.
-        mkdir -p "${DSH_HOME}/.npm-global" 2>/dev/null || true
-        export npm_config_prefix="${DSH_HOME}/.npm-global"
-        export npm_config_cache="${DSH_HOME}/.npm" 2>/dev/null || true
-        log "npm prefix -> ${DSH_HOME}/.npm-global (数据区)"
+        mkdir -p "${HOME_DIR}/.npm-global" 2>/dev/null || true
+        export npm_config_prefix="${HOME_DIR}/.npm-global"
+        export npm_config_cache="${HOME_DIR}/.npm" 2>/dev/null || true
+        log "npm prefix -> ${HOME_DIR}/.npm-global (HOME)"
         # bun (fnOS 依赖应用 bunjs): 把 bin 加入 PATH, 供 dsh agent 环境调用
         for cand in /var/apps/bunjs/target/bin "${APP_VOL:-}/@appcenter/bunjs/bin"; do
             if [ -x "${cand}/bun" ]; then
@@ -304,7 +556,14 @@ else console.log("WARNING: no pattern matched (upstream code changed?)");
         done
         log "dsh self-hosting node via: ${NODE_BIN}"
     fi
-    DSH_HOME="${DSH_HOME}" nohup "${DSH_BIN}" ${DSH_ARGS:-} web --port "${DSH_PORT}" ${TRUSTED_HOST_ARGS} \
+    # 放宽 host-webserver 的「插件 prefix 路由」信任门 (issue #3):
+    # 插件经 webserver 注册的 prefix 路由 (如 /usage/api/*) 在**非回环 Host** 上
+    # 会在 handler 执行前被拒, 由 webserver 兜底 catch 转成**空响应体 400**
+    # (静默失败, 无日志). 这是 /api 网关之外的第二道门, 上面的 privileged-fence
+    # 补丁只覆盖 dsh-client-connection, 覆盖不到它. 这里同样放宽到 trustedHosts,
+    # 与 --trusted-host / dashboard 围栏保持同一信任面. 幂等; 上游修好后自动跳过.
+    patch_webserver_trust
+    HOME="${HOME_DIR}" DSH_HOME="${HOME_DIR}" nohup "${DSH_BIN}" ${DSH_ARGS:-} web --port "${DSH_PORT}" ${TRUSTED_HOST_ARGS} \
         >> "${DSH_LOG}" 2>&1 &
     echo $! > "${DSH_PID}"
     log "dsh web started (pid $(cat "${DSH_PID}")) :0.0.0.0:${DSH_PORT} (patch: host 0.0.0.0) trusted-host:${TRUSTED_HOST_VALUES}"
@@ -359,7 +618,9 @@ start_dashboard() {
 }
 
 start() {
+    # 数据区 (凭据/日志/pid) + 工作空间 (若已启用共享目录, 空占位, start_dsh 内迁移)
     mkdir -p "${DATA_DIR}" "${DSH_HOME}"
+    [ -n "${WORK_HOME}" ] && mkdir -p "${WORK_HOME}" 2>/dev/null || true
     # 防死锁: 若历史 pid 文件因权限或所有权不可写, 尝试清理
     for pf in "${DSH_PID}" "${PROXY_PID}" "${DASH_PID}"; do
         [ -e "${pf}" ] && [ ! -w "${pf}" ] && rm -f "${pf}" 2>/dev/null || true

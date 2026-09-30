@@ -1,5 +1,25 @@
 # CHANGELOG
 
+## 🚧 未发布（下个版本）
+
+> 处理 0.2.0-rc.2 后提交的 issue：#2 / #3 / #5 / #7。
+
+### 🐛 修复
+
+- **`cordis.patch.yml` 启动被覆盖导致 UI 配置丢失（#5）**：`cmd/main` 原来每次 start 都整文件覆盖该文件，而 0.1.7+ 起 UI 设置也写入这里，导致重启即丢。改为**幂等 upsert** —— 只增改 `webserver` 的 `host`/`port`，其余插件配置、注释与空行原样保留；python3 不可用时回退原整文件写入
+- **插件 prefix 路由在非回环入口被拒（#3）**：新增 `patch_webserver_trust`，放宽 `dsh-host-webserver` 的信任门到 `--trusted-host` 同一列表，修掉「两道门只放宽一道」（`/api` 网关已放宽、插件 prefix 路由未放宽 → 空响应体 400）
+- **飞牛 `5ddd.com` 域名无法打开（#7）**：`fnos.net` / `5ddd.com` 两条后缀均内置进信任列表（`cmd/main` 的 `--trusted-host` + 28001 面板围栏），子域自动匹配，用户无需手填
+
+### ✨ 变更
+
+- **默认工作空间改到共享目录（#2）**：工作空间与会话迁至 `/vol<N>/@appshare/dsh/dsh_home`（飞牛文件管理器可见、可 SMB、**卸载不删**），凭据（`.env` / `.credentials.yaml` / `proxy.conf` / `trusted_hosts.conf`）留在 `@appdata/dsh/dsh_home` 以软链接入 HOME，避免密钥落在共享位置
+- 老版本首次启动**自动迁移**：逐文件比对大小校验，任一文件缺失/大小不符即整体回退旧布局且**不动源数据**，下次启动重试（已用真实文件系统验证成功 / 幂等 / 失败回退三条路径）
+- 面板与 npm/corepack 缓存、`update/` 热更新目录随工作空间落到共享目录；卸载后工作空间保留，凭据随应用清理（重装重填）
+
+### ⚠️ 需要实测确认
+
+- #3 的替换模式系依据 issue 报告反推，**需在 NAS 上重启后核验 `app.log` 的 `webserver-trust patch:` 一行**（`patched` / `already patched` / `no pattern matched`）；未命中需按真实 `dsh-host-webserver` 代码调整
+
 ## 🚀 0.2.0-rc.2 (2026-09-30)
 
 > 升级上游 `@deepseek-ai/dsh` 到 0.2.0-rc.2（跨 minor 版本，汇总 0.2.0-rc.1 + rc.2）。**官方语音输入插件兼容落地**：面板放行官方实验性插件 + 安装自动钉 dsh 版本，实测模型经代理下载全链路可用。三处本地补丁已对 0.2.0-rc.2 逐项重新审计。

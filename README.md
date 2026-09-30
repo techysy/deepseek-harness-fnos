@@ -55,7 +55,7 @@
 
 **访问与安全**
 - **局域网直连**：通过 `cordis.patch.yml` 把 dsh web 绑定到 `0.0.0.0:28000`（dsh CLI 本身拒绝 `--host 0.0.0.0`）
-- **信任围栏**：`/api/*` 校验 Host / Origin，只放行回环地址 + `--trusted-host` 列表（启动时自动探测的本机 IP + `fnos.net` + `trusted_hosts.conf` 中的域名），其余来源 403
+- **信任围栏**：`/api/*` 校验 Host / Origin，只放行回环地址 + `--trusted-host` 列表（启动时自动探测的本机 IP + `fnos.net` / `5ddd.com` + `trusted_hosts.conf` 中的域名），其余来源 403
 - **桌面免 401**：上游 0.1.2 起的浏览器 token 鉴权对静态桌面入口不可用，运行时补丁对已通过围栏的请求放行（等效「围栏即认证」）
 - **FN Connect / DDNS 远程访问**：安装向导或应用设置里填 FN ID / 自定义域名，自动写入信任域，远程访问不再 403
 - **设置页 host 模式**：构建期补丁让非回环访问（局域网 IP、FN Connect 域名）也能读写服务端配置，插件 / 模型设置不再空白
@@ -83,7 +83,7 @@
    | --- | --- |
    | DeepSeek API Key | `sk-` 开头，写入数据区 `dsh_home/.env` |
    | 代理 IP / 代理端口 | 两项都填才生效，拼成 `http://IP:端口` 写入 `proxy.conf`；访问 GitHub / 外部 API 超时再填 |
-   | FN Connect ID | 只填 ID（如 `techysy`），自动生成 `<ID>.fnos.net`、`dsh.<ID>.fnos.net`、`fnos.net` 三个信任域 |
+   | FN Connect ID | 只填 ID（如 `techysy`），自动生成 `<ID>.fnos.net`、`dsh.<ID>.fnos.net` 信任域；`fnos.net` 与 `5ddd.com`（飞牛两条域名后缀）已内置 |
    | 自定义域名 | 用自己的域名做 DDNS 远程访问时填完整域名（不带 `https://`），追加到信任域 |
 
 3. 在 fnOS 桌面打开 **DeepSeek Harness** 图标进入 UI；或浏览器访问 `http://<NAS_IP>:28000`
@@ -103,7 +103,7 @@
 | --- | --- | --- |
 | **fnOS 桌面图标** | 当前访问 fnOS 的主机名 + 端口 `28000` | iframe 变体在桌面窗口内打开，url 变体在新标签页打开；直连端口，不经网关 |
 | **局域网 / Tailscale** | `http://<NAS_IP>:28000` | 本机所有非回环 IPv4 启动时自动加入信任列表 |
-| **FN Connect** | `https://dsh.<FN_ID>.fnos.net` | 需在安装向导 / 应用设置中填写 FN ID；`https://<FN_ID>.fnos.net`、`https://fnos.net/<FN_ID>` 同样被信任 |
+| **FN Connect** | `https://dsh.<FN_ID>.fnos.net` | 需在安装向导 / 应用设置中填写 FN ID；`https://<FN_ID>.fnos.net`、`https://fnos.net/<FN_ID>` 同样被信任。飞牛 `5ddd.com` 后缀域名已内置信任，无需填写 |
 | **自定义域名（DDNS）** | `https://<你的域名>` | 需在安装向导 / 应用设置中填写自定义域名 |
 | **管理面板** | `http://<NAS_IP>:28001/` | 与 dsh 相同的信任面 |
 
@@ -135,7 +135,7 @@
 | **📥 一键更新** | 从 GitHub 直链下载本机架构的 iframe 变体 fpk 到数据区 `dsh_home/update/`，再点「安装更新」经 `appcenter-cli install-fpk` 完成安装与重启 |
 | **界面** | 日 / 夜主题切换、中英双语 |
 
-- 信任面与 dsh 一致：本机 / 局域网 IP、`fnos.net` 及其子域、`trusted_hosts.conf` 自定义信任域可访问，其余来源 403
+- 信任面与 dsh 一致：本机 / 局域网 IP、`fnos.net` / `5ddd.com` 及其子域、`trusted_hosts.conf` 自定义信任域可访问，其余来源 403
 - 面板日志写入数据区 `dashboard.log`；`cmd/main stop` 不停面板，卸载时由 `uninstall_callback` 显式停止
 
 **启用热更新**（一次性，SSH 到 NAS 执行）：
@@ -192,14 +192,17 @@ PROXY=http://127.0.0.1:7890
 | 管理面板 | `0.0.0.0:28001` | `dashboard.js` |
 | 网关 socket | `/var/apps/dsh/target/app.sock` → `proxy.py` | 统一网关 `/app/dsh`，未打通（见 [访问方式](#访问方式)） |
 
-数据区为 fnOS 注入的 `TRIM_PKGVAR`（通常是 `/vol<N>/@appdata/dsh`）：
+数据分两处存放 —— **工作空间放共享目录**（文件管理器可见、SMB 可共享、卸载不删），**凭据留在数据区**（不对外暴露）：
 
-| 路径 | 内容 |
-| --- | --- |
-| `app.log` · `dsh.log` · `proxy.log` · `dashboard.log` | 生命周期 / dsh / 网关代理 / 面板日志 |
-| `install.log` · `config.log` | 安装与升级 / 应用设置回调日志 |
-| `dsh-web-url.txt` | 最近一次启动时 dsh 打印的带 token 访问 URL（应急用） |
-| `dsh_home/` | dsh 的 `HOME`：`.env`、`proxy.conf`、`trusted_hosts.conf`、`profiles/web/`（插件与 `cordis.patch.yml`）、`update/`（热更新下载）、`.npm-global` / `.npm` / `.corepack` |
+| 位置 | 路径 | 内容 |
+| --- | --- | --- |
+| 共享目录 | `/vol<N>/@appshare/dsh/dsh_home` | dsh 的 `HOME`：`profiles/web/`（插件与 `cordis.patch.yml`）、会话 / 工作空间文件、`update/`（热更新下载）、`.npm-global` / `.npm` / `.corepack` |
+| 数据区 | `/vol<N>/@appdata/dsh` | 生命周期日志（`app.log` / `dsh.log` / `proxy.log` / `dashboard.log`）、`install.log` / `config.log`、pid、`dsh-web-url.txt` |
+| 数据区 | `/vol<N>/@appdata/dsh/dsh_home` | **凭据类**：`.env`（API Key）、`.credentials.yaml`、`proxy.conf`、`trusted_hosts.conf`、迁移标记 `.migrated-to-share` |
+
+> 凭据以软链形式接入共享 `HOME`（dsh 仍从同一 HOME 读取），真实文件始终留在数据区。
+> **卸载行为**：`@appshare` 是 `config/resource` 声明的共享目录，fnOS 卸载时**不清理**——工作空间与会话得以保留；`@appdata` 会被清理，凭据随之移除（重装后重填，符合预期）。
+> 老版本（数据全部在 `@appdata/dsh/dsh_home`）首次启动会自动迁移到上述布局：**逐文件校验大小**，任一文件不符即整体回退旧布局并保留原数据，下次启动重试。
 
 ## Agent 环境命令
 
