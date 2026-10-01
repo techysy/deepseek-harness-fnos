@@ -139,14 +139,15 @@
 - 信任面与 dsh 一致：本机 / 局域网 IP、`fnos.net` / `5ddd.com` 及其子域、`trusted_hosts.conf` 自定义信任域可访问，其余来源 403
 - 面板日志写入数据区 `dashboard.log`；`cmd/main stop` 不停面板，卸载时由 `uninstall_callback` 显式停止
 
-**启用热更新**（一次性，SSH 到 NAS 执行）：
+**启用热更新**（一次性，SSH 到 NAS 执行；面板「已下载的更新」卡片会给出**跟随当前下载目录**的完整命令，直接复制即可）：
 
 ```bash
-echo 'dsh ALL=(root) NOPASSWD: /usr/local/bin/appcenter-cli install-fpk /vol*/@appdata/dsh/dsh_home/update/*' | sudo tee /etc/sudoers.d/dsh-hotfix
+# 默认下载目录 (共享工作区) 的白名单示例:
+echo 'dsh ALL=(root) NOPASSWD: /usr/local/bin/appcenter-cli install-fpk /vol*/@appshare/dsh/dsh_home/update/*' | sudo tee /etc/sudoers.d/dsh-hotfix
 sudo chmod 440 /etc/sudoers.d/dsh-hotfix
 ```
 
-授权后「安装更新」按钮生效；不授权则按钮提示失败，可改用应用中心手动安装（已下载的 fpk 在数据区 `dsh_home/update/`）。
+白名单是永久生效的精确路径授权：仅允许 `appcenter-cli install-fpk` 安装该目录内的 fpk，无法执行其他命令。授权状态面板会自动探测显示；若下载目录换到其他授权目录，按面板提示更新白名单路径即可。不授权则按钮提示失败，可改用应用中心手动安装（fpk 已下载在工作区 `update/` 或所选下载目录）。
 
 <details>
 <summary><b>旧版本 fpk 加装管理面板</b></summary>

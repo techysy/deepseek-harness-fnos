@@ -459,18 +459,32 @@ function updateFiles() {
     return { name: f, size, mtime };
   });
 }
-// sudo 授权探测 (issue #4): sudo -n -l 只列规则不执行命令, 安全;
-// 命中 README 固化的 dsh-hotfix 白名单 (appcenter-cli install-fpk update/*) 即视为已授权
+// sudo 授权探测 (issue #4): sudo -n -l 只列规则不执行命令, 安全.
+// 按**实际文件路径**校验: sudoers 白名单路径必须覆盖当前下载目录里的 fpk,
+// 不能只看命令里有没有 install-fpk (共享布局后 update 目录搬到 @appshare,
+// 旧 @appdata 白名单对它失效 — 真机踩过: 面板显示已授权, 实际 sudo 拒绝).
 function sudoAuthorized() {
+  const dir = selectedUpdateDir();
+  const files = updateFiles();
+  const probe = path.join(dir, files.map(f => f.name).sort().pop() || "probe.fpk");
+  let out = "";
   try {
     const r = spawnSync("sudo", ["-n", "-l"], { encoding: "utf8", timeout: 5000 });
     if (r.status !== 0) return false;
-    return /appcenter-cli\s+install-fpk/.test((r.stdout || "") + (r.stderr || ""));
+    out = (r.stdout || "") + (r.stderr || "");
   } catch { return false; }
+  const ruleRe = /NOPASSWD:\s*(\S+\s+install-fpk\s+(\S+))/g;
+  let m;
+  while ((m = ruleRe.exec(out))) {
+    if (!m[2]) continue;
+    const argRe = new RegExp("^" + m[2].replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".") + "$");
+    if (argRe.test(probe)) return true;
+  }
+  return false;
 }
-// sudoers 白名单跟随所选目录: 默认目录保持 /vol* 通配; 自定义目录用精确路径
+// sudoers 白名单跟随所选目录生成: 卷号通配 (/vol4 → /vol*), 其余精确匹配
 function sudoHintFor(dir) {
-  const pat = dir === UPDATE_DIR ? "/vol*/@appdata/dsh/dsh_home/update/*" : dir.replace(/\/?$/, "") + "/*";
+  const pat = dir.replace(/^\/(vol\d+)/, "/vol*") + "/*";
   return "echo 'dsh ALL=(root) NOPASSWD: /usr/local/bin/appcenter-cli install-fpk " + pat + "' | sudo tee /etc/sudoers.d/dsh-hotfix\nsudo chmod 440 /etc/sudoers.d/dsh-hotfix";
 }
 let updateBusy = false;
@@ -501,6 +515,7 @@ function updateApply() {
   // sudo -n: 未授权时立即失败 (不挂起), 返回一次性授权命令
   const files = updateFiles();
   if (!files.length) return { ok: false, err: "update 目录没有已下载的 fpk" };
+  if (!sudoAuthorized()) return { ok: false, err: "sudo 白名单未覆盖当前下载目录 (授权命令见下方, 路径跟随所选目录)" };
   const file = path.join(selectedUpdateDir(), files.map(f => f.name).sort().pop());
   const log = fs.openSync(path.join(DATA_DIR, "dashboard.log"), "a");
   const child = spawn("sudo", ["-n", "/usr/local/bin/appcenter-cli", "install-fpk", file], { detached: true, stdio: ["ignore", log, log] });
