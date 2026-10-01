@@ -208,7 +208,7 @@ jobs:
           VERSION="${TAG#v}"
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
             || gh release create "$TAG" --repo "$GITHUB_REPOSITORY" \
-                 --title "🚀 DeepSeek Harness fnOS $VERSION" \
+                 --title "DeepSeek Harness fnOS $VERSION" \
                  --generate-notes
           gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber \
             "dsh-${VERSION}-${{ inputs.arch }}.fpk" \
