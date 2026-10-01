@@ -835,7 +835,11 @@ let up="";
 if(d.upstreamDsh){
   const tagDisplay=d.upstreamTag||("v"+d.upstreamDsh);
   const tagLink=d.upstreamUrl?('<a href="'+d.upstreamUrl+'" target="_blank" rel="noopener" style="text-decoration:underline">'+esc(tagDisplay)+"</a>"):esc(tagDisplay);
-  if(d.upstreamDsh===d.dshInstalled) up=pill(t("isLatest"),"ok")+" "+tagLink;
+  // 已是最新判定兼容本地构建段 (docs/packaging-fpk.md §1): fpk 版本 = 上游版本 + 纯数字构建段
+  // (如 0.2.0-rc.2.1), 等于上游号或以其为前缀加 "." 即视为最新; 上游真出新版时正常提示
+  const inst=d.dshInstalled||"";
+  const isLatest=inst===d.upstreamDsh||(d.upstreamDsh&&inst.startsWith(d.upstreamDsh+"."));
+  if(isLatest) up=pill(t("isLatest"),"ok")+" "+tagLink;
   else up=pill(t("hasNew"),"warnp")+" "+tagLink;
 } else up='<span class="dim">'+t("detectFail")+"</span>";
 let pr=d.projectRelease?('<a href="'+d.projectRelease.url+'" target="_blank" rel="noopener" style="text-decoration:underline">'+esc(d.projectRelease.tag)+"</a>"):'<span class="dim">'+t("detectFail")+"</span>";
