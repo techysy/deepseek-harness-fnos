@@ -262,6 +262,30 @@ start_dsh() {
             fi
         fi
     fi
+    # 工作区注册表路径修复: 老布局迁移到共享区后, storages/workspace.json 里的工作区
+    # 绝对路径仍指向旧 HOME (@appdata/dsh/dsh_home/...), 这些目录已不存在 → 会话/目录
+    # 选择器落在死路径上。幂等: 仅当文件包含旧前缀时重写为当前 HOME_DIR 前缀;
+    # 工作区在 HOME 之外的路径 (如用户网盘目录) 原样保留.
+    if [ "${HOME_DIR}" != "${DSH_HOME}" ] && [ -f "${HOME_DIR}/storages/workspace.json" ] \
+        && grep -q "${DSH_HOME}/" "${HOME_DIR}/storages/workspace.json" 2>/dev/null \
+        && command -v python3 >/dev/null 2>&1; then
+        WS_REG="${HOME_DIR}/storages/workspace.json" WS_OLD="${DSH_HOME}/" WS_NEW="${HOME_DIR}/" \
+            python3 - <<'FIXWS'
+import json, os
+reg, old, new = os.environ["WS_REG"], os.environ["WS_OLD"], os.environ["WS_NEW"]
+d = json.load(open(reg, encoding="utf-8"))
+n = 0
+for w in ((d.get("tables") or {}).get("workspaces") or {}).values():
+    p = w.get("path") or ""
+    if p.startswith(old):
+        w["path"] = new + p[len(old):]
+        n += 1
+if n:
+    json.dump(d, open(reg, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+print(f"rewritten {n} workspace path(s)")
+FIXWS
+        log "workspace-registry: 已将注册表内 ${DSH_HOME}/ 前缀的工作区路径重写为 ${HOME_DIR}/"
+    fi
     # 写入 cordis.patch.yml: 覆盖 webserver 绑 0.0.0.0 (允许局域网/Tailscale 直连)
     # dsh CLI --host 0.0.0.0 会被 web-startup 插件拒绝; patch 层优先级更高, 绕过校验
     #
