@@ -127,13 +127,14 @@
 
 | 功能 | 说明 |
 | --- | --- |
-| **服务状态** | dsh web 进程 / 健康检查 / 运行时长、网关代理、fpk 与已装 dsh 版本、数据区路径 |
-| **日志查看** | `app.log`（生命周期）/ `dsh.log`（dsh 输出）/ `dashboard.log`（面板），tail 尾部 + 5 秒自动刷新 |
-| **插件管理** | 第三方插件与**官方实验性插件**（`@deepseek-ai/dsh-experimental-*`，如语音输入）**禁用 / 启用 / 删除 / 安装**（改 `profiles/web/package.json` 的 bundles，重启 dsh 生效）；官方插件安装时自动钉到已装 dsh 版本（该作用域 npm `latest` 可能指向 alpha），默认源失败回退 npmmirror；插件不兼容导致 dsh 启动崩溃循环时可在此快速禁用 |
-| **版本检查** | 上游版本优先取 GitHub `deepseek-ai/deepseek-harness` 的 Release Tag，取不到回退 npmmirror / npmjs；本项目最新 Release 优先 GitHub、Gitee 兜底 |
+| **总览** | dsh web 进程 / 健康检查 / 运行时长、网关代理、fpk 与已装 dsh 版本、磁盘占用（数据区 + 语音模型缓存 + update 目录） |
+| **日志查看** | `app.log`（生命周期）/ `dsh.log`（dsh 输出）/ `dashboard.log`（面板），关键字一键过滤（error / EADDRINUSE / patch / share:）+ tail 尾部 + 5 秒自动刷新 |
+| **插件管理** | 数据源合并 bundles ∪ dependencies：第三方插件与**官方实验性插件**（`@deepseek-ai/dsh-experimental-*`，如语音输入）**禁用 / 启用 / 删除 / 安装**（改 `profiles/web/package.json` 的 bundles，重启 dsh 生效）；官方插件安装时自动钉到已装 dsh 版本（安装前明示确认），默认源失败回退 npmmirror，失败原因可读化；官方插件与 dsh 版本一致性检查 |
+| **版本检查** | 上游版本优先取 GitHub `deepseek-ai/deepseek-harness` 的 Release Tag，取不到回退 npmmirror / npmjs；本项目最新 Release 优先 GitHub、Gitee 兜底；fpk 升级后首访显示更新横幅 |
 | **一键重启 dsh** | 经 `cmd/main restart` 执行，面板自身不受影响 |
-| **📥 一键更新** | 从 GitHub 直链下载本机架构的 iframe 变体 fpk 到数据区 `dsh_home/update/`，再点「安装更新」经 `appcenter-cli install-fpk` 完成安装与重启 |
-| **界面** | 日 / 夜主题切换、中英双语 |
+| **📥 一键更新** | 从 GitHub 直链下载本机架构的 iframe 变体 fpk（**实时进度条**：百分比 / 速度 / 剩余时间；**下载目录可选** —— fnOS ≥ 1.34.0 经[开放平台 API](https://developer.fnnas.com/api/overview/)读取应用授权目录，老系统回退默认 `dsh_home/update/`），再点「安装更新」经 `appcenter-cli install-fpk` 完成安装与重启；sudo 白名单一次配置永久生效（仅限所选目录内的 fpk），面板可探测已授权状态 |
+| **出站代理** | 面板内配置 GitHub/Gitee 代理（HTTP CONNECT 隧道），与 dsh 主进程共用 `proxy.conf`，面板立即生效、dsh 重启后生效 |
+| **界面** | UI 对齐 [CreditDaddy](https://github.com/techysy/CreditDaddy) 设计语言（视图导航 / panel+toolbar / 卡片 / 胶囊状态 / SVG 图标 / dsh 鲸鱼 logo），日 / 夜主题、中英双语 |
 
 - 信任面与 dsh 一致：本机 / 局域网 IP、`fnos.net` / `5ddd.com` 及其子域、`trusted_hosts.conf` 自定义信任域可访问，其余来源 403
 - 面板日志写入数据区 `dashboard.log`；`cmd/main stop` 不停面板，卸载时由 `uninstall_callback` 显式停止

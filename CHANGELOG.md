@@ -12,6 +12,15 @@
 
 ### ✨ 变更
 
+- **管理面板 UI/UX 重构（#4 / #8）**：设计语言对齐 [CreditDaddy](https://github.com/techysy/CreditDaddy) 面板 —— 视图导航（总览/插件/日志）、panel+toolbar 布局、统计摘要行、卡片式插件列表、胶囊状态徽章、Feather 风格内联 SVG 图标、主 logo 换 dsh 应用图标（`/logo.png` 路由）、亮暗双主题与中英双语保留
+- **热更新链路体验（#4）**：
+  - **下载进度条**：后端记录 received/total/速度，前端 1s 轮询渲染（百分比 + 已下载/总大小 + 速度 + 剩余时间），页面重开自动恢复进度，完成/失败状态明确
+  - **sudo 授权文案修正**：「一次性授权」误导 → 改为「一次配置永久生效」并标注白名单边界（仅允许安装所选目录内的 fpk）；授权命令一键复制；`sudo -n -l` 探测并显示已授权/未授权状态
+  - **出站代理**：面板可配置 GitHub/Gitee 代理（HTTP CONNECT 隧道，零依赖自实现），与 dsh 主进程共用 `proxy.conf`；仅代理公网地址，回环/局域网直连；面板立即生效，dsh 重启后生效
+  - **下载目录可选**：对接 [fnOS 开放平台 API](https://developer.fnnas.com/api/overview/)（`trim.file.getSharedAccessibleFolders`，unix socket + `TRIM_API_TOKEN`），`config/resource` 声明 `api-scope: ["trim.file.sharedAccess"]`；管理员在「应用设置 → 授权目录」添加目录后即可在面板选用，sudo 白名单提示跟随所选目录生成；老版本 fnOS 无开放 API 时优雅回退默认目录
+- **插件管理增强（#8 P1）**：数据源合并 `bundles ∪ dependencies`（官方实验性插件此前只在 bundles、表格不可见），版本从 `node_modules/<name>/package.json` 读取，第三方/官方实验性分组展示；安装 `@deepseek-ai/*` 前明示钉版确认 + 安装 loading 态；pnpm 失败按网络/版本/pnpm 缺失给出可操作建议；官方插件与 dsh 版本一致性检查（不一致警示 + 升级路径提示）
+- **可观测性（#8 P2）**：fpk 升级后首访显示更新横幅（附 Release 链接）；已下载 fpk 显示大小/时间并支持删除；状态页新增磁盘占用（数据区 + 语音模型缓存，du 结果 10 分钟缓存）；日志关键字一键过滤（error / EADDRINUSE / patch / share:）
+- **403 页面引导（#8 P3）**：裸 403 改为说明页 —— 列出信任面、回显被拒 Host、指引到应用设置添加信任域
 - **默认工作空间改到共享目录（#2）**：工作空间与会话迁至 `/vol<N>/@appshare/dsh/dsh_home`（飞牛文件管理器可见、可 SMB、**卸载不删**），凭据（`.env` / `.credentials.yaml` / `proxy.conf` / `trusted_hosts.conf`）留在 `@appdata/dsh/dsh_home` 以软链接入 HOME，避免密钥落在共享位置
 - 老版本首次启动**自动迁移**：逐文件比对大小校验，任一文件缺失/大小不符即整体回退旧布局且**不动源数据**，下次启动重试（已用真实文件系统验证成功 / 幂等 / 失败回退三条路径）
 - 面板与 npm/corepack 缓存、`update/` 热更新目录随工作空间落到共享目录；卸载后工作空间保留，凭据随应用清理（重装重填）
