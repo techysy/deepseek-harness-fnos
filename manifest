@@ -1,8 +1,8 @@
 appname               = dsh
-version               = 0.2.0-rc.2.4
+version               = 0.2.0-rc.2.5
 display_name          = DeepSeek Harness
 desc                  = DeepSeek Harness 自托管版 — 基于 @deepseek-ai/dsh v0.2.0-rc.2，离线打包，局域网直连 NAS_IP:28000，管理面板 :28001
-changelog             = v0.2.0-rc.2.4: 修复图片输入在 @appshare 因 EACCES 被拒（#9）
+changelog             = v0.2.0-rc.2.5: 管理面板强化 — 补齐重启 dsh 前端处理（#10）+ 日志实时搜索与滚底
 platform              = x86
 source                = thirdparty
 maintainer            = techysy
