@@ -2,12 +2,12 @@
 
 ## 🚧 未发布（下个版本）
 
-> 处理 0.2.0-rc.2 后提交的 issue：#2 / #3 / #5 / #7。
+> 处理 0.2.0-rc.2 后提交的 issue：#2 / #5 / #7（已真机验证）；#3 核查后确认修法不成立，保持打开（见下）。
 
 ### 🐛 修复
 
 - **`cordis.patch.yml` 启动被覆盖导致 UI 配置丢失（#5）**：`cmd/main` 原来每次 start 都整文件覆盖该文件，而 0.1.7+ 起 UI 设置也写入这里，导致重启即丢。改为**幂等 upsert** —— 只增改 `webserver` 的 `host`/`port`，其余插件配置、注释与空行原样保留；python3 不可用时回退原整文件写入
-- **插件 prefix 路由在非回环入口被拒（#3）**：新增 `patch_webserver_trust`，放宽 `dsh-host-webserver` 的信任门到 `--trusted-host` 同一列表，修掉「两道门只放宽一道」（`/api` 网关已放宽、插件 prefix 路由未放宽 → 空响应体 400）
+- **共享布局下的两处落点修正（#2 真机验证中发现）**：① `cordis.patch.yml` 的 upsert 原写在数据区 `DSH_HOME`，而共享布局下 dsh 读的是 `@appshare` 的 HOME —— 绑定配置会被 dsh 判为缺失并以空模板重建，`0.0.0.0` 随之失效，现改写实际生效的 `HOME_DIR`；② 新装机时 dsh 会直接在共享 HOME 里现生成 `.credentials.yaml`，启动时自动归位数据区并软链回去，保证凭据始终不落共享目录
 - **飞牛 `5ddd.com` 域名无法打开（#7）**：`fnos.net` / `5ddd.com` 两条后缀均内置进信任列表（`cmd/main` 的 `--trusted-host` + 28001 面板围栏），子域自动匹配，用户无需手填
 
 ### ✨ 变更
@@ -16,9 +16,12 @@
 - 老版本首次启动**自动迁移**：逐文件比对大小校验，任一文件缺失/大小不符即整体回退旧布局且**不动源数据**，下次启动重试（已用真实文件系统验证成功 / 幂等 / 失败回退三条路径）
 - 面板与 npm/corepack 缓存、`update/` 热更新目录随工作空间落到共享目录；卸载后工作空间保留，凭据随应用清理（重装重填）
 
-### ⚠️ 需要实测确认
+### ✅ 真机验证（2026-10-01，x86 NAS，0.2.0-rc.2）
 
-- #3 的替换模式系依据 issue 报告反推，**需在 NAS 上重启后核验 `app.log` 的 `webserver-trust patch:` 一行**（`patched` / `already patched` / `no pattern matched`）；未命中需按真实 `dsh-host-webserver` 代码调整
+- **#2 迁移实测通过**：老布局首次启动自动迁移，`app.log` 依次输出 `迁移 dsh_home → @appshare` → `迁移完成`，凭据留数据区并软链入共享 HOME，dsh 正常启动
+- **#5 实测通过**：手工写入的 `cordis.patch.yml`（webserver + 第三方模型目录 + 默认模型）跨多次重启完整保留，upsert 只增改 webserver 的 host/port
+- **#7 实测通过**：`trusted-host` 启动行包含 `fnos.net 5ddd.com`，飞牛双后缀域名免配置
+- **#3 核查结论（未修复，需补充现场）**：依据 issue 报告反推的替换模式**在真实 `dsh-host-webserver/lib/index.js` 中不存在**——该文件只做路由分发，非回环拒绝发生在 `dsh-client-connection` 的 `requestRejection`（403，且已正确使用 `trustedHosts`）；issue 中的空响应体 400 来自 webserver 对插件 handler **异常的兜底 catch**，属插件侧错误而非第二道信任门。报告中的 `no pattern matched` 日志验证了此结论，投机补丁已移除，**#3 保持打开**，需要报告者提供：哪个插件、哪个 URL、回环与非回环各自的状态码
 
 ## 🚀 0.2.0-rc.2 (2026-09-30)
 

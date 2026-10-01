@@ -165,62 +165,6 @@ migrate_dsh_home() {
     return 0
 }
 
-# 放宽 host-webserver 的「插件 prefix 路由」信任门 (issue #3).
-# 说明: dsh 对非回环 Host 的请求会做一道 trust 判定, 未通过者由 webserver 兜底
-# `.catch()` 转成空响应体 400 — 插件注册的 prefix 路由 (自带 HTTP 接口的插件)
-# 因此从 LAN/域名/Tailscale 入口全部取不到数据 (回环 200). 本函数幂等放宽该判定.
-# 覆盖三要素: ① 值改为从 trustedHosts 推导 ② 该列表仍受 --trusted-host 控制的
-# 宿主/回环判定不被误伤 ③ 上游若已原生支持 (>=0.2.0-rc.2 实测无) 则自动跳过.
-patch_webserver_trust() {
-    local WS_LIB="" cand
-    # 定位 @deepseek-ai/dsh-host-webserver/lib/index.js (优先相对 DSH_JS, 多路径兜底)
-    for cand in \
-        "$(dirname "$(dirname "${DSH_JS}")")/dsh-host-webserver/lib/index.js" \
-        "${APP_DIR}/target/server/node_modules/@deepseek-ai/dsh-host-webserver/lib/index.js" \
-        "${APP_DIR}/server/node_modules/@deepseek-ai/dsh-host-webserver/lib/index.js" \
-        "${APP_DIR}/node_modules/@deepseek-ai/dsh-host-webserver/lib/index.js" \
-        "${APP_VOL}/@appcenter/deepseek-harness/server/node_modules/@deepseek-ai/dsh-host-webserver/lib/index.js" \
-        "${APP_VOL}/@appcenter/dsh/server/node_modules/@deepseek-ai/dsh-host-webserver/lib/index.js" \
-        /var/apps/nodejs_v24/target/lib/node_modules/@deepseek-ai/dsh-host-webserver/lib/index.js; do
-        [ -f "$cand" ] && WS_LIB="$cand" && break
-    done
-    if [ -z "${WS_LIB}" ]; then
-        log "webserver-trust patch: SKIP (dsh-host-webserver/lib/index.js 未找到 — 该版本可能无 prefix 路由门)"
-        return 0
-    fi
-    local out
-    out=$("${NODE_BIN:-node}" -e '
-const fs = require("fs");
-const p = process.argv[1];
-let s = fs.readFileSync(p, "utf8");
-const MARK = "dsh-fnos";
-if (s.includes("/* dsh-fnos:")) { process.stdout.write("already patched"); process.exit(0); }
-// 命中「非回环即拒」的信任判定: 形如
-//   if (!isTrustedApiRequest(request, [])) return ...403/400
-//   const trusted = host ? [] : this.trustedHosts
-// 这里只做保守的、可核验的替换: 把该文件内作为「拒绝依据」的空列表 [] 改为
-// trustedHosts (该文件已从 options 解构 trustedHosts, 存在同名绑定).
-let changed = 0;
-const reps = [
-  ["isTrustedApiRequest(request, [])", "isTrustedApiRequest(request, this.trustedHosts || [])"],
-  ["!isTrustedApiRequest(req, [])", "!isTrustedApiRequest(req, this.trustedHosts || [])"],
-];
-for (const [o, n] of reps) {
-  const c = s.split(o).length - 1;
-  if (c > 0 && !s.includes(n)) { s = s.split(o).join(n); changed += c; }
-}
-if (changed) {
-  if (s.includes("/* dsh-fnos:")) {} else s = s.replace(/^/,
-    "/* dsh-fnos: relax webserver prefix-route trust gate to trustedHosts (issue #3) */\n");
-  fs.writeFileSync(p, s);
-  process.stdout.write("patched (" + changed + " site)");
-} else {
-  process.stdout.write("no pattern matched (upstream layout changed? 需人工核对 trust 判定)");
-}
-' "${WS_LIB}" 2>&1)
-    log "webserver-trust patch: ${out:-no output} @ ${WS_LIB}"
-}
-
 # 寻找 dsh 可执行; 无 bin 链接时用 node 直接运行 dsh 的 bin.js (优先离线包)
 find_dsh_bin() {
     local cand
@@ -264,6 +208,11 @@ start_dsh() {
         for cred in .env .credentials.yaml proxy.conf trusted_hosts.conf; do
             if [ -e "${DSH_HOME}/${cred}" ]; then
                 [ -e "${HOME_DIR}/${cred}" ] || ln -sf "${DSH_HOME}/${cred}" "${HOME_DIR}/${cred}" 2>/dev/null || true
+            elif [ -f "${HOME_DIR}/${cred}" ] && [ ! -L "${HOME_DIR}/${cred}" ]; then
+                # 新装机时 dsh 会直接在 HOME 里现生成凭据 (如 .credentials.yaml):
+                # 归位数据区再软链回去, 保证凭据始终不落共享目录
+                mv "${HOME_DIR}/${cred}" "${DSH_HOME}/${cred}" 2>/dev/null \
+                    && ln -sf "${DSH_HOME}/${cred}" "${HOME_DIR}/${cred}" 2>/dev/null || true
             fi
         done
         log "share: 使用共享工作空间 HOME=${HOME_DIR} (凭据软链自 ${DSH_HOME})"
@@ -313,7 +262,9 @@ start_dsh() {
     #   - 只增改 id: webserver 的 host/port 两行, 其余内容 (用户/其他插件的配置) 原样保留
     #   - YAML 键按 id 对齐 (首行裸 `- ` 缩进 0), 与上游生成格式一致, 避免结构错位
     #   - python3 不可用时回退为原整文件写入 (宁可丢失也不让服务起不来)
-    CORDIS_PATCH="${DSH_HOME}/profiles/web/cordis.patch.yml"
+    # 注意必须写在 dsh 实际读取的 HOME (HOME_DIR, 共享布局下是 @appshare) 里;
+    # 写到 DSH_HOME (数据区) 会被 dsh 视为不存在而在共享区重建空模板, 0.0.0.0 绑定随之失效
+    CORDIS_PATCH="${HOME_DIR}/profiles/web/cordis.patch.yml"
     if [ -f "${CORDIS_PATCH}" ] && grep -qE '^[[:space:]]*-[[:space:]]*id:[[:space:]]*["'"'"']?webserver' "${CORDIS_PATCH}" 2>/dev/null \
         && command -v python3 >/dev/null 2>&1; then
         CORDIS_PATCH="${CORDIS_PATCH}" DSH_PORT="${DSH_PORT}" /usr/bin/env python3 - <<'PATCHYML'
@@ -556,13 +507,12 @@ else console.log("WARNING: no pattern matched (upstream code changed?)");
         done
         log "dsh self-hosting node via: ${NODE_BIN}"
     fi
-    # 放宽 host-webserver 的「插件 prefix 路由」信任门 (issue #3):
-    # 插件经 webserver 注册的 prefix 路由 (如 /usage/api/*) 在**非回环 Host** 上
-    # 会在 handler 执行前被拒, 由 webserver 兜底 catch 转成**空响应体 400**
-    # (静默失败, 无日志). 这是 /api 网关之外的第二道门, 上面的 privileged-fence
-    # 补丁只覆盖 dsh-client-connection, 覆盖不到它. 这里同样放宽到 trustedHosts,
-    # 与 --trusted-host / dashboard 围栏保持同一信任面. 幂等; 上游修好后自动跳过.
-    patch_webserver_trust
+    # issue #3 备注 (2026-10-01 真机核查, 0.2.0-rc.2): 曾在此尝试放宽
+    # dsh-host-webserver 的「插件 prefix 路由」信任门, 但该文件的 trust 判定
+    # 并不存在 (它只做路由分发, 非回环拒绝发生在 dsh-client-connection 的
+    # requestRejection → 403, 空响应体 400 来自 webserver 对 handler 异常的
+    # 兜底 catch). 无可放宽的门, 补丁已移除; #3 需拿到可复现的插件路由现场
+    # (哪个插件、哪个 URL、回环 vs 非回环的状态码) 再定位.
     HOME="${HOME_DIR}" DSH_HOME="${HOME_DIR}" nohup "${DSH_BIN}" ${DSH_ARGS:-} web --port "${DSH_PORT}" ${TRUSTED_HOST_ARGS} \
         >> "${DSH_LOG}" 2>&1 &
     echo $! > "${DSH_PID}"
