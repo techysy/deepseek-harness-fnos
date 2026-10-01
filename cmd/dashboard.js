@@ -401,7 +401,7 @@ function downloadToFile(url, dest, depth = 0) {
   return new Promise(async (resolve, reject) => {
     if (depth > 5) return reject(new Error("too many redirects"));
     try {
-      const req = await makeRequest(url, { timeout: 30000, headers: { "User-Agent": "dsh-dashboard" } });
+      const req = await makeRequest(url, { timeout: 120000, headers: { "User-Agent": "dsh-dashboard" } });
       req.on("response", res => {
         if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) {
           res.resume();
