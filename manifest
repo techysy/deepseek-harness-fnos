@@ -1,8 +1,8 @@
 appname               = dsh
-version               = 0.2.0-rc.2.1
+version               = 0.2.0-rc.2.2
 display_name          = DeepSeek Harness
 desc                  = DeepSeek Harness 自托管版 — 基于 @deepseek-ai/dsh v0.2.0-rc.2，离线打包，局域网直连 NAS_IP:28000，管理面板 :28001
-changelog             = v0.2.0-rc.2.1: 工作空间迁共享目录（卸载不删）+ 28001 面板重构（下载进度条·出站代理·插件增强·可观测性）+ 版本号策略修订
+changelog             = v0.2.0-rc.2.2: 打通 fnOS 统一网关 /app/dsh — DDNS/HTTPS 同源入口 + 桌面入口走网关（免暴露 28000，多一层 fnOS 登录保护）
 platform              = x86
 source                = thirdparty
 maintainer            = techysy
@@ -13,4 +13,5 @@ desktop_uidir         = ui
 desktop_applaunchname = dsh.Application
 ctl_stop              = true
 checkport             = false
+micro_app             = true
 install_dep_apps      = nodejs_v24:bunjs

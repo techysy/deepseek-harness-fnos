@@ -4,9 +4,12 @@
       "title": "DeepSeek Harness",
       "icon": "images/icon_{0}.png",
       "type": "iframe",
+      "microApp": true,
+      "port": "",
       "protocol": "http",
-      "port": "28000",
-      "url": "/",
+      "gatewaySocket": "app.sock",
+      "gatewayPrefix": "/app/dsh",
+      "url": "/app/dsh/",
       "allUsers": true
     }
   }

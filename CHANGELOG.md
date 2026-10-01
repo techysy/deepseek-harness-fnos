@@ -1,5 +1,25 @@
 # CHANGELOG
 
+## 🚀 0.2.0-rc.2.2 (2026-10-01)
+
+> **打通 fnOS 统一网关 `/app/dsh`** —— DDNS / 自定义域名 HTTPS 场景的正解入口。此前文档结论"统一网关不可行"系误判：网关路由一直是通的，是 `cmd/proxy.py` 从不剥离 `/app/dsh` 前缀，dsh 对该路径返回 SPA 404 被误读为路由失败。
+
+### ✨ 变更
+
+- **统一网关入口**：`https://<fnOS访问域名>/app/dsh/`（fnOS 登录保护、HTTPS 同源、无混合内容、免暴露 28000）—— 适用于局域网 5666/5667、DDNS 自定义域名、FN Connect 全部场景
+- **桌面入口改走网关**：`app/ui/config` 增加 `microApp` / `gatewaySocket` / `gatewayPrefix` 声明（对齐官方微应用 fygo-browser 的接入方式），fnOS 桌面图标经 `/app/dsh/` 加载；manifest 声明 `micro_app = true`，安装时 appcenter 自动注册网关路由
+- `cmd/proxy.py`：剥离 `/app/dsh` 前缀后转发；`Origin`/`Referer` 头同步 rebasing 为回环地址（dsh fence 校验 `Origin.host === Host`，不改写则网关侧 POST 全 403）
+
+### 📌 访问方式（本版起）
+
+| 场景 | 入口 |
+|------|------|
+| 局域网直连 | `http://<NAS_IP>:28000`（不变） |
+| fnOS 网页内 | 桌面图标（走网关，与访问 fnOS 的域名/协议无关） |
+| DDNS / FN Connect 远程 | 登录 fnOS 后访问 `/app/dsh/` 或点桌面图标 |
+
+28000 直连入口保留，但远程场景推荐网关入口。
+
 ## 🚀 0.2.0-rc.2.1 (2026-10-01)
 
 > 处理 0.2.0-rc.2 后提交的 issue：#2 / #5 / #7（已真机验证）；#3 核查后确认修法不成立，保持打开（见下）。**本版起 fpk 版本 = 上游版本 + 纯数字构建段**（`0.2.0-rc.2.1` = 上游 rc.2 + 第 1 次本地修复发布），旧"同版本号重打包"策略废止 —— 同版本号会让 `install-fpk` 静默跳过、面板热更新误判最新（详见 [docs/packaging-fpk.md](docs/packaging-fpk.md) §1）。已装 `v0.2.0-rc.2` 的用户可经面板一键更新升级。

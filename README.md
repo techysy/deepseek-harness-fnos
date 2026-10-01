@@ -101,13 +101,14 @@
 
 | 入口 | 地址 | 说明 |
 | --- | --- | --- |
-| **fnOS 桌面图标** | 当前访问 fnOS 的主机名 + 端口 `28000` | iframe 变体在桌面窗口内打开，url 变体在新标签页打开；直连端口，不经网关 |
-| **局域网 / Tailscale** | `http://<NAS_IP>:28000` | 本机所有非回环 IPv4 启动时自动加入信任列表 |
+| **fnOS 桌面图标** | 随 fnOS 访问方式自适应（走统一网关 `/app/dsh`） | 推荐入口：局域网、DDNS、FN Connect 下都可用，自带 fnOS 登录保护 |
+| **统一网关** | `https://<访问域名>/app/dsh/` | 与访问 fnOS 的域名/协议同源 —— **DDNS / 自定义域名的正解入口**，免暴露 28000、无混合内容问题 |
+| **局域网 / Tailscale** | `http://<NAS_IP>:28000` | 直连端口；本机所有非回环 IPv4 启动时自动加入信任列表 |
 | **FN Connect** | `https://dsh.<FN_ID>.fnos.net` | 需在安装向导 / 应用设置中填写 FN ID；`https://<FN_ID>.fnos.net`、`https://fnos.net/<FN_ID>` 同样被信任。飞牛 `5ddd.com` 后缀域名已内置信任，无需填写 |
-| **自定义域名（DDNS）** | `https://<你的域名>` | 需在安装向导 / 应用设置中填写自定义域名 |
+| **自定义域名（DDNS）** | `https://<你的域名>` | 需在安装向导 / 应用设置中填写自定义域名（28000 直连信任面）；走网关则无需填写 |
 | **管理面板** | `http://<NAS_IP>:28001/` | 与 dsh 相同的信任面 |
 
-> fnOS 统一网关 `/app/dsh`（`app.sock` → `cmd/proxy.py` → `127.0.0.1:28000`）**未打通**：`proxy.py` 仍会随应用启动，但网关路由登录后返回 Not Found，请使用上表入口。调查过程见 [docs/dsh-access-and-gateway.md](docs/dsh-access-and-gateway.md)。
+> 统一网关细节与打通过程见 [docs/dsh-access-and-gateway.md](docs/dsh-access-and-gateway.md)。远程场景推荐网关入口；28000 直连入口保留。
 
 **安全机制**（0.2.0-rc.2 现状，补丁均为幂等，每次启动 / 安装时自动检查）：
 
@@ -192,7 +193,7 @@ PROXY=http://127.0.0.1:7890
 | --- | --- | --- |
 | dsh web | `0.0.0.0:28000` | DeepSeek Harness 浏览器 UI（`TRIM_SERVICE_PORT` 可覆盖） |
 | 管理面板 | `0.0.0.0:28001` | `dashboard.js` |
-| 网关 socket | `/var/apps/dsh/target/app.sock` → `proxy.py` | 统一网关 `/app/dsh`，未打通（见 [访问方式](#访问方式)） |
+| 网关 socket | `/var/apps/dsh/target/app.sock` → `proxy.py` | 统一网关 `/app/dsh`（DDNS / HTTPS 入口，见 [访问方式](#访问方式)） |
 
 数据分两处存放 —— **工作空间放共享目录**（文件管理器可见、SMB 可共享、卸载不删），**凭据留在数据区**（不对外暴露）：
 
@@ -321,7 +322,7 @@ bash scripts/package-arm-offline.sh node_modules-arm64-<sha>.tar.gz  # ARM：用
 
 - 28000 / 28001 除信任围栏外没有登录鉴权（浏览器 token 鉴权已被补丁关闭），只适合局域网 / FN Connect 使用，请勿直接暴露到公网
 - 语音输入插件在**局域网 HTTP 直连**时无法录音 —— 浏览器只在 HTTPS / localhost 开放麦克风（与封装无关的安全上下文限制，FN Connect 外网 HTTPS 不受影响）；局域网方案见 [语音输入插件兼容指南](docs/dsh-voice-input.md)
-- fnOS 统一网关 `/app/dsh` 未打通，请用 28000 直连、FN Connect 或自定义域名访问
+- fnOS 统一网关 `/app/dsh` 需 fnOS 登录会话（`0.2.0-rc.2.2` 起打通）；更早版本的 fpk 请用 28000 直连或 FN Connect 访问
 - 上游仍是开发者预览版（`-rc`），本地补丁依赖上游代码的特定写法，上游改动后可能失效，需按检查清单核对
 - `v0.1.7-rc.2` 及更早的 fpk 中，Web 侧边栏终端可能因服务账号登录 shell 为 `nologin` 而打开即退出（提示 `This account is currently not available.`）；0.2.0-rc.2 起安装脚本自动修正，老版本可手动执行 `sudo usermod -s /bin/bash dsh`
 - 桌面打开出现 `dsh web authentication required` 401（启动补丁在个别环境没打上）时，SSH 到 NAS 执行热修脚本后在应用中心重启 dsh：

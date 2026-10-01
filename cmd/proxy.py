@@ -13,6 +13,7 @@
 """
 import http.client
 import os
+import re
 import socket
 import socketserver
 import struct
@@ -94,6 +95,18 @@ GATEWAY_PREFIX = os.environ.get("GATEWAY_PREFIX", "/app/dsh")
 
 # 重写 HTML body: 把绝对资源路径 (/assets, /plugins, /manifest, /favicon) 加上统一网关前缀
 # 否则经 fnOS 统一网关 /app/dsh 访问时, 浏览器按绝对路径请求 /assets/... 丢失前缀 → 404 空白页
+def _rebase_origin(url: str, loopback: str) -> str:
+    """把 Origin/Referer 头里的 scheme://host 部分替换为回环地址 (保留路径).
+
+    dsh fence 校验 Origin.host === Host.host; Host 已改写为 127.0.0.1:DSH_PORT,
+    Origin 若仍是 https://外部域名 就会 mismatch → 403. 这里统一 rebasing.
+    """
+    m = re.match(r"^(https?://[^/]+)(/.*)?$", url, re.I)
+    if not m:
+        return url
+    return loopback + (m.group(2) or "")
+
+
 def _rewrite_html(data: bytes) -> bytes:
     try:
         text = data.decode("utf-8")
@@ -139,14 +152,29 @@ class Handler(BaseHTTPRequestHandler):
         """把请求转发到后端 127.0.0.1:DSH_PORT."""
         try:
             conn = http.client.HTTPConnection(*BACKEND, timeout=30)
-            # 重写 Host 头为回环地址 (规避 dsh browser-trust)
+            # 剥离统一网关前缀: 网关转发 /app/dsh/... 原样到达, dsh 只认根路径.
+            # (2026-10 修: 此前不剥前缀, dsh SPA 对 /app/dsh/ 返回 404 "not found",
+            #  被误判为"统一网关路由未打通" — 实际网关一直是通的)
+            path = self.path
+            if path == GATEWAY_PREFIX:
+                path = "/"
+            elif path.startswith(GATEWAY_PREFIX + "/"):
+                path = path[len(GATEWAY_PREFIX):]
+            # 重写 Host 头为回环地址 (规避 dsh browser-trust fence);
+            # Origin/Referer 同步改写 — dsh 的 isTrustedApiRequest 要求 Origin.host
+            # 与 Host 一致, 否则经网关的 POST (带 Origin) 会被 fence 403.
             body = None
             length = self.headers.get("Content-Length")
             if length and length.isdigit():
                 body = self.rfile.read(int(length))
             headers = {k: v for k, v in self.headers.items() if k.lower() not in ("host", "connection")}
             headers["Host"] = f"127.0.0.1:{DSH_PORT}"
-            conn.request(self.command, self.path, body=body, headers=headers)
+            loopback = f"http://127.0.0.1:{DSH_PORT}"
+            for h in ("Origin", "Referer"):
+                v = headers.get(h)
+                if v:
+                    headers[h] = _rebase_origin(v, loopback)
+            conn.request(self.command, path, body=body, headers=headers)
             resp = conn.getresponse()
             # 转发状态行 + 响应头
             self.send_response(resp.status)

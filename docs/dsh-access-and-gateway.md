@@ -1,66 +1,60 @@
-# dsh 访问方式说明 & 统一网关 /app/dsh 不可行
+# dsh 访问方式说明 & 统一网关 /app/dsh（已打通）
 
-> 说明 dsh（DeepSeek Harness）fnOS 应用的**正式访问方式**，以及为何
-> **fnOS 统一网关 `/app/dsh` 方案不可行**（已调查并放弃）。
+> 说明 dsh（DeepSeek Harness）fnOS 应用的**正式访问方式**，以及统一网关
+> `/app/dsh` 的**打通过程** —— 2026-10 起 DDNS / 自定义域名 HTTPS 场景的正解入口。
 
 ---
 
 ## 1. dsh 的正式访问方式
 
-dsh 使用 **`28000` 端口**作为唯一 Web 入口，支持两种访问：
-
 | 方式 | 地址 | 说明 |
 |------|------|------|
 | **局域网直连** | `http://<NAS_IP>:28000` | 局域网 / Tailscale 直接访问 |
-| **FN Connect 域名** | `http://dsh.<FN_ID>.fnos.net` | 外网远程访问（需在设置页配 FN Connect 域名） |
+| **FN Connect 域名** | `https://dsh.<FN_ID>.fnos.net` 或走 fnOS 网页 | 远程访问 |
+| **统一网关（推荐）** | fnOS 网页内的**桌面图标**，或 `https://<访问域名>/app/dsh/` | 与访问 fnOS 的域名/协议同源；DDNS 自定义域名场景的正解 |
 
-> dsh web 绑定 `0.0.0.0:28000`（经 `cordis.patch.yml` 覆盖 webserver 配置）。
-> 这两种方式是**正式、已验证可用**的入口。
+> dsh web 绑定 `0.0.0.0:28000`（经 `cordis.patch.yml` 覆盖）供局域网直连；
+> 统一网关入口由 fnOS HTTPS 终结 + fnOS 登录保护，**无需对外暴露 28000**。
 
 ---
 
-## 2. 统一网关 /app/dsh 方案不可行
+## 2. 统一网关打通过程（2026-10-01）
 
-### 2.1 现象
-尝试让 dsh 通过 **fnOS 统一网关**（`http://<NAS>:5666/app/dsh`）访问，但**登录后返回 Not Found**。
+### 2.1 曾经的误判
 
-### 2.2 根因（已通过 PostgreSQL 确认）
-fnOS 统一网关路由 `/app/<appname>` → 应用 `gateway_socket`，依赖应用中心数据库的
-`gateway_socket` / `gateway_prefix` 字段。查询 `appcenter` 数据库：
+早期调查结论是"统一网关不可行"：`/app/dsh` 登录后返回 Not Found，手动在
+appcenter 数据库补 `gateway_socket` / `gateway_prefix` 后仍 Not Found，遂放弃。
 
-```sql
-SELECT a.app_name, s.gateway_socket, s.gateway_prefix, a.micro_app
-FROM app a JOIN app_service s ON s.app_id = a.id
-WHERE a.app_name = 'dsh';
-```
+**实际根因**：网关路由**一直是通的** —— "Not Found" 是 dsh 对 `/app/dsh/...`
+路径返回的 SPA 404（body 恰为 "not found"），因为 `cmd/proxy.py` 收到网关
+转发来的带前缀请求后**原样转发**，从不剥离 `/app/dsh` 前缀。
 
-结果：
-```
-app_name | gateway_socket | gateway_prefix | micro_app
-dsh      | (空)           | (空)           | t
-```
+### 2.2 正确的接入方式（对齐官方微应用 fygo-browser）
 
-- **`micro_app = true` 已设置**，但 **`gateway_socket` 和 `gateway_prefix` 为空**
-- **`micro_app` 不会自动填充 `gateway_socket`**
-- 网关不知道 `/app/dsh` 转发到哪个 socket → 登录后 Not Found
+1. `manifest` 声明 `micro_app = true` → appcenter 安装时自动填充数据库
+   `gateway_socket = /var/apps/<app>/target/app.sock` 与 `gateway_prefix = /app/<appname>`
+   （2026-10 前的版本缺这一条，数据库字段为空 → 网关确实无路由）
+2. `app/ui/config` 声明 `"microApp": true` + `"gatewaySocket": "app.sock"` +
+   `"gatewayPrefix": "/app/dsh"` + `"url": "/app/dsh/"` → 桌面图标经网关加载
+3. `cmd/proxy.py` 两处修复：
+   - **剥离 `/app/dsh` 前缀**再转发（此前缺失，是"Not Found"的直接原因）
+   - **`Origin` / `Referer` 头同步改写为回环地址** —— dsh fence 校验
+     `Origin.host === Host`，Host 已改写为 `127.0.0.1:28000`，不改写 Origin
+     则经网关的 POST（浏览器带 Origin）全部 403
 
-### 2.3 对比正常应用
-正常接入统一网关的应用（如 fygo-browser）：
-```
-gateway_socket = /var/apps/fygo-browser/target/app.sock
-gateway_prefix = /app/fygo-browser
-```
+### 2.3 验证
 
-需要**手动设置** `gateway_socket` 和 `gateway_prefix` 才能生效。
+- socket 直连 `/app/dsh/` → 200 + 完整页面（剥前缀生效）
+- 网关 `https://<NAS>:5667/app/dsh/` 与桌面图标 → UI 完整加载，未登录时
+  返回 fnOS 登录门（与官方微应用 fygo-browser 行为一致）
 
-### 2.4 手动设置后仍不可行
-手动更新数据库设置 `gateway_socket` / `gateway_prefix` 并重启网关后，
-**登录后仍 Not Found**（涉及 fnOS 网关更深层的应用接入机制，未完整打通）。
+### 2.4 顺带收益
 
-### 2.5 结论
-- **`/app/dsh` 统一网关方案放弃**
-- dsh 保持 **局域网直连 28000** + **FN Connect 域名** 作为正式访问方式
-- 这些方式已验证可用，无需统一网关
+- **DDNS / 自定义域名**：`https://你的域名` 登录 fnOS 后 `/app/dsh/` 同源可用，
+  不受浏览器混合内容限制，也**无需在路由器暴露 28000**
+- **多一层安全边界**：网关入口有 fnOS 登录保护（28000 直连入口仅有信任围栏）
+- 授权目录选择（开放平台 JS SDK）的 redirectUri 依赖同源网关 —— 本修复同时
+  为后续接入铺了路
 
 ---
 
@@ -68,12 +62,11 @@ gateway_prefix = /app/fygo-browser
 
 | 文件 | 说明 |
 |------|------|
-| `cordis.patch.yml` | 覆盖 webserver 绑 `0.0.0.0:28000` |
-| `trusted_hosts.conf` | FN Connect 域名（browser-trust 信任） |
-| `cmd/proxy.py` | 统一网关代理（`/app/dsh` → 127.0.0.1:28000，方案放弃后保留为可选） |
-
-> ⚠️ `cmd/proxy.py` 虽保留，但**统一网关路由未打通**，`/app/dsh` 不保证可用。
-> 正式访问请用 28000 直连或 FN Connect 域名。
+| `cordis.patch.yml` | 覆盖 webserver 绑 `0.0.0.0:28000`（局域网直连入口） |
+| `trusted_hosts.conf` | FN Connect / 自定义域名（28000 直连的信任面） |
+| `manifest` | `micro_app = true`（网关注册前提） |
+| `app/ui/config` | 桌面入口网关声明（`gatewaySocket` / `gatewayPrefix`） |
+| `cmd/proxy.py` | 网关代理：剥前缀 + Origin 改写 + WebSocket 透传 + HTML 路径重写 |
 
 ---
 
