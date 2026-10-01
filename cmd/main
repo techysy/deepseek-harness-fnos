@@ -67,6 +67,13 @@ else
     WORK_HOME=""   # 共享目录不可用 → 走旧布局 (DATA_DIR/dsh_home)
 fi
 DSH_HOME="${DATA_DIR}/dsh_home"
+
+# ── 工作区位置事实源 (只读, 供 28001 面板定位) ──
+# 每次 start 把实际生效的 dsh HOME 写入 workspace.active; 面板直接读它,
+# 不再依赖环境变量探测链 (手动拉面板/环境不全时会探测错 → 插件列表 500).
+# 工作区本身**不可切换**: 目录选择统一走 fnOS 原生「应用设置 → 授权目录」
+# (面板经开放 API 读取, 如下载目录), 避免 HOME 树整体搬迁带来的配置漂移.
+WS_ACTIVE="${DATA_DIR}/workspace.active"
 DSH_LOG="${DATA_DIR}/dsh.log"
 DSH_PID="${DATA_DIR}/dsh.pid"
 PROXY_LOG="${DATA_DIR}/proxy.log"
@@ -217,6 +224,8 @@ start_dsh() {
         done
         log "share: 使用共享工作空间 HOME=${HOME_DIR} (凭据软链自 ${DSH_HOME})"
     fi
+    # 落盘实际生效的 dsh HOME (面板的工作区定位事实源, 见顶部 WS_ACTIVE 说明)
+    printf '%s\n' "${HOME_DIR}" > "${WS_ACTIVE}" 2>/dev/null || true
     # 初始化 HOME (共享工作空间或旧数据区)
     mkdir -p "${HOME_DIR}/profiles/web" "${HOME_DIR}/logs" 2>/dev/null
     # 权限自愈: dsh 强制安全要求 .credentials.yaml / .env 必须是 mode 600 (只属主可读写),
