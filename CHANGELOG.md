@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 🚀 0.2.0-rc.2.4 (2026-10-01)
+
+> 修复图片输入在 `@appshare` 工作区因 EACCES 权限错误被误报 `session/agent-busy`（#9）。上游不变（0.2.0-rc.2），fpk 版本 = 上游 + 构建段 4。
+
+### 🐛 修复
+
+- **图片上传/持久化在共享工作区报 EACCES 权限错误（#9）**：上游 `dsh-attachment-local` 的 `ensureDurableHome` 默认向上遍历同步父目录到文件系统根目录（`parse(home).root`），在共享工作区（`/vol<N>/@appshare/dsh/dsh_home`）下会尝试 open 祖先目录 `/vol<N>/@appshare`，而 fnOS 共享根目录普通应用账户无权读取触发 `EACCES`，进而被包装为误导性的 `prompt rejected (session/agent-busy)`。在 `cmd/main` 增加运行时幂等兼容补丁，将向上同步边界限制在 `dsh_home` 内部，防止越界访问系统目录。
+
 ## 🚀 0.2.0-rc.2.3 (2026-10-01)
 
 > 面板下载体验完善（真机使用反馈）。上游不变（0.2.0-rc.2），fpk 版本 = 上游 + 构建段 3。

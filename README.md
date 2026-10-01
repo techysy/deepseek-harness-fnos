@@ -117,6 +117,7 @@
 | 0.0.0.0 绑定 | `cmd/main` 写 `dsh_home/profiles/web/cordis.patch.yml` | 覆盖 webserver 的 host / port |
 | 信任围栏 | `cmd/main` 以单个 `--trusted-host` 传入全部信任值 | 该参数是 variadic，重复写 flag 只保留最后一个 |
 | 桌面免 401 | `cmd/main` 内联补丁 `dsh-client-connection` 的 `isAuthenticated`（python3 不可用时用 node 兜底） | 结果写入 `app.log`；**请勿把 28000 / 28001 暴露到不受信任的网络** |
+| 附件权限隔离 | `cmd/main` 内联补丁 `dsh-attachment-local` 的 `ensureDurableHome`（issue #9） | 限制 durability 同步在 dsh_home 内部，防止越界访问 `@appshare` 报 EACCES |
 | 特权 API 放行 | 同上 | 上游 0.1.2 起已原生修复，补丁自动跳过 |
 | 设置页 host 模式 | 构建期 `cmd/patch_settings_memory.py`，安装 / 升级时再补一次 | 非回环访问读写服务端配置 |
 
@@ -337,6 +338,7 @@ bash scripts/package-arm-offline.sh node_modules-arm64-<sha>.tar.gz  # ARM：用
 
 <p>
   <a href="https://github.com/techysy" title="techysy — 主要维护者"><img src="https://github.com/techysy.png?size=80" width="48" height="48" alt="techysy" /></a>
+  <a href="https://github.com/Solismuchengxue" title="Solismuchengxue (曹政) — #9 图片输入 EACCES 根因定位与修复"><img src="https://github.com/Solismuchengxue.png?size=80" width="48" height="48" alt="Solismuchengxue" /></a>
   <a href="https://github.com/xiehuc" title="xiehuc — #5 反馈 + cordis.patch.yml 保留修复 PR"><img src="https://github.com/xiehuc.png?size=80" width="48" height="48" alt="xiehuc" /></a>
   <a href="https://github.com/fffy520" title="fffy520 — #2 工作区落共享目录建议"><img src="https://github.com/fffy520.png?size=80" width="48" height="48" alt="fffy520" /></a>
   <a href="https://github.com/wendellace" title="wendellace — #3 prefix 路由 400 反馈"><img src="https://github.com/wendellace.png?size=80" width="48" height="48" alt="wendellace" /></a>

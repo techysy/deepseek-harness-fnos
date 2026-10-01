@@ -498,6 +498,62 @@ else console.log("WARNING: no pattern matched (upstream code changed?)");
     else
         log "privileged-fence patch: SKIP (dsh-client-connection/lib/index.js 未找到, CC_LIB 定位失败 — 检查安装布局)"
     fi
+
+    # 修复图片/附件持久化向上同步触发 @appshare EACCES 权限错误 (issue #9):
+    # dsh-attachment-local 的 ensureDurableHome 默认把 boundary 设为 parse(home).root,
+    # 会从 @appshare/dsh/dsh_home 一路向上 fs.open 父目录进行 fsync 同步.
+    # fnOS 的 @appshare 是系统共享目录, 普通 dsh 账号无权读取/open /volX/@appshare,
+    # 导致上传图片时抛出 EACCES 被包装成 session/agent-busy 假死拒绝.
+    # 幂等补丁将 boundary 限制在 home 自身, 避免越界同步宿主系统目录.
+    ATTACH_LIB=""
+    for cand in \
+        "$(dirname "$(dirname "${DSH_JS}")")/dsh-attachment-local/lib/index.js" \
+        "${APP_DIR}/target/server/node_modules/@deepseek-ai/dsh-attachment-local/lib/index.js" \
+        "${APP_DIR}/server/node_modules/@deepseek-ai/dsh-attachment-local/lib/index.js" \
+        "${APP_VOL}/@appcenter/deepseek-harness/server/node_modules/@deepseek-ai/dsh-attachment-local/lib/index.js" \
+        "${APP_VOL}/@appcenter/dsh/server/node_modules/@deepseek-ai/dsh-attachment-local/lib/index.js" \
+        "/vol4/@appcenter/deepseek-harness/server/node_modules/@deepseek-ai/dsh-attachment-local/lib/index.js" \
+        "/vol4/@appcenter/dsh/server/node_modules/@deepseek-ai/dsh-attachment-local/lib/index.js"; do
+        [ -f "$cand" ] && ATTACH_LIB="$cand" && break
+    done
+    if [ -n "${ATTACH_LIB}" ]; then
+        attach_patch_out=$(/usr/bin/python3 - "${ATTACH_LIB}" <<'ATTACHPY'
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+old = "await ensureDurableDirectory(home, parse(home).root);"
+new = "await ensureDurableDirectory(home, home); /* dsh-fnos: do not sync ancestor outside dsh home (issue #9) */"
+if new in s:
+    print("attachment-durability patch: already patched")
+elif old in s:
+    s = s.replace(old, new)
+    open(p, "w", encoding="utf-8").write(s)
+    print("attachment-durability patch: patched")
+else:
+    print("attachment-durability patch: SKIP (upstream changed?)")
+ATTACHPY
+2>&1)
+        if [ -z "$attach_patch_out" ] || echo "$attach_patch_out" | grep -qi "error\|traceback\|not found"; then
+            attach_patch_out=$("${NODE_BIN:-node}" -e '
+const fs = require("fs");
+const p = process.argv[1];
+let s = fs.readFileSync(p, "utf8");
+const old = "await ensureDurableDirectory(home, parse(home).root);";
+const rep = "await ensureDurableDirectory(home, home); /* dsh-fnos: do not sync ancestor outside dsh home (issue #9) */";
+if (s.includes(rep)) { process.stdout.write("attachment-durability patch: already patched (node)"); }
+else if (s.includes(old)) {
+  s = s.replace(old, rep);
+  fs.writeFileSync(p, s);
+  process.stdout.write("attachment-durability patch: patched (node)");
+} else {
+  process.stdout.write("attachment-durability patch: SKIP (upstream changed?) (node)");
+}
+' "${ATTACH_LIB}" 2>&1)
+        fi
+        log "${attach_patch_out}"
+    else
+        log "attachment-durability patch: SKIP (dsh-attachment-local/lib/index.js 未找到)"
+    fi
     # 启动 dsh web: 不带 --host (让 patch 的 0.0.0.0 生效), 显式传 --port + trusted-host
     # DSH_ARGS 非空时 = 用 node <bin.js> 运行 (无 bin 链接的兜底)
     # dsh 自托管 node: 把 nodejs_v24 bin 目录加入 PATH, 供 dsh 进程及 agent 调用 node/npm
