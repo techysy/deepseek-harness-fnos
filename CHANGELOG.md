@@ -8,7 +8,7 @@
 
 - **统一网关入口**：`https://<fnOS访问域名>/app/dsh/`（fnOS 登录保护、HTTPS 同源、无混合内容、免暴露 28000）—— 适用于局域网 5666/5667、DDNS 自定义域名、FN Connect 全部场景
 - **桌面入口改走网关**：`app/ui/config` 增加 `microApp` / `gatewaySocket` / `gatewayPrefix` 声明（对齐官方微应用 fygo-browser 的接入方式），fnOS 桌面图标经 `/app/dsh/` 加载；manifest 声明 `micro_app = true`，安装时 appcenter 自动注册网关路由
-- `cmd/proxy.py`：剥离 `/app/dsh` 前缀后转发；`Origin`/`Referer` 头同步 rebasing 为回环地址（dsh fence 校验 `Origin.host === Host`，不改写则网关侧 POST 全 403）
+- `cmd/proxy.py`：剥离 `/app/dsh` 前缀后转发；`Origin`/`Referer` 头同步 rebasing 为回环地址（dsh fence 校验 `Origin.host === Host`，不改写则网关侧 POST 全 403）；**WebSocket 升级走原始 socket 直通**（`Connection: Upgrade` 必须保留才能进后端升级分支，http.client 对 101 处理不可靠 —— 之前 RPC 的 `remote.mux` 连不上即此因）
 
 ### 📌 访问方式（本版起）
 

@@ -151,15 +151,17 @@ class Handler(BaseHTTPRequestHandler):
     def _proxy(self):
         """把请求转发到后端 127.0.0.1:DSH_PORT."""
         try:
-            conn = http.client.HTTPConnection(*BACKEND, timeout=30)
-            # 剥离统一网关前缀: 网关转发 /app/dsh/... 原样到达, dsh 只认根路径.
-            # (2026-10 修: 此前不剥前缀, dsh SPA 对 /app/dsh/ 返回 404 "not found",
-            #  被误判为"统一网关路由未打通" — 实际网关一直是通的)
             path = self.path
             if path == GATEWAY_PREFIX:
                 path = "/"
             elif path.startswith(GATEWAY_PREFIX + "/"):
                 path = path[len(GATEWAY_PREFIX):]
+            # WebSocket 升级请求走原始 socket 直通: http.client 对 101 的处理
+            # 不可靠, 且必须保留 Connection: Upgrade / Upgrade 头才能让 Node 后端
+            # 进入升级分支 (此前 Connection 被剥掉 → dsh 当普通 GET 回 404)
+            if (self.headers.get("Upgrade") or "").lower() == "websocket":
+                return self._ws_proxy(path)
+            conn = http.client.HTTPConnection(*BACKEND, timeout=30)
             # 重写 Host 头为回环地址 (规避 dsh browser-trust fence);
             # Origin/Referer 同步改写 — dsh 的 isTrustedApiRequest 要求 Origin.host
             # 与 Host 一致, 否则经网关的 POST (带 Origin) 会被 fence 403.
@@ -181,11 +183,6 @@ class Handler(BaseHTTPRequestHandler):
             for k, v in resp.getheaders():
                 if k.lower() not in ("transfer-encoding", "connection", "content-length"):
                     self.send_header(k, v)
-            # 若是 WebSocket 升级, 特殊处理
-            if resp.status == 101 and resp.getheader("Upgrade", "").lower() == "websocket":
-                self.end_headers()
-                _relay(self.connection, resp.fp.raw._sock if hasattr(resp.fp.raw, "_sock") else resp.fp.raw)
-                return
             # 常规响应: 转发 body
             data = resp.read()
             # 若是 HTML, 重写绝对资源路径 (加统一网关前缀), 避免空白页
@@ -202,6 +199,67 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_header("Content-Type", "text/plain")
                 self.end_headers()
                 self.wfile.write(str(e).encode())
+            except Exception:
+                pass
+
+    def _ws_proxy(self, path):
+        """WebSocket 升级请求: 原始 socket 直通后端, 不经 http.client.
+
+        手工组转发请求 (剥网关前缀, Host 改写回环, Connection/Upgrade 原样保留),
+        透传后端 101 响应后进入双向字节流中继; 非 101 (如 404) 原样转发给客户端.
+        """
+        backend = None
+        try:
+            backend = socket.create_connection(BACKEND, timeout=30)
+            lines = [f"{self.command} {path} HTTP/1.1"]
+            loopback = f"http://127.0.0.1:{DSH_PORT}"
+            for k, v in self.headers.items():
+                if k.lower() in ("host", "connection", "upgrade", "content-length"):
+                    continue
+                if k.lower() in ("origin", "referer"):
+                    v = _rebase_origin(v, loopback)
+                lines.append(f"{k}: {v}")
+            lines.append(f"Host: 127.0.0.1:{DSH_PORT}")
+            lines.append("Connection: Upgrade")
+            lines.append(f"Upgrade: {self.headers.get('Upgrade')}")
+            backend.sendall(("\r\n".join(lines) + "\r\n\r\n").encode("latin1"))
+            # 读后端响应头 (逐字节兜底, 不多读 body)
+            buf = b""
+            while b"\r\n\r\n" not in buf:
+                chunk = backend.recv(4096)
+                if not chunk:
+                    break
+                buf += chunk
+            head, _, rest = buf.partition(b"\r\n\r\n")
+            head_lines = head.split(b"\r\n")
+            status_line = head_lines[0].decode("latin1")
+            parts = status_line.split(" ", 2)
+            code = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 502
+            self.send_response(code, parts[2] if len(parts) > 2 else "")
+            for h in head_lines[1:]:
+                k, _, v = h.partition(b":")
+                self.send_header(k.decode("latin1").strip(), v.decode("latin1").strip())
+            self.end_headers()
+            if code == 101:
+                if rest:
+                    self.wfile.write(rest)
+                self.close_connection = True
+                _relay(self.connection, backend)
+            else:
+                if rest:
+                    self.wfile.write(rest)
+        except Exception as e:
+            try:
+                self.send_response(502)
+                self.send_header("Content-Type", "text/plain")
+                self.end_headers()
+                self.wfile.write(str(e).encode())
+            except Exception:
+                pass
+        finally:
+            try:
+                if backend and code != 101:
+                    backend.close()
             except Exception:
                 pass
 
