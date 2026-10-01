@@ -13,7 +13,7 @@
 [![Node](https://img.shields.io/badge/Node.js-24-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
 [![License](https://img.shields.io/github/license/techysy/deepseek-harness-fnos?label=%E8%AE%B8%E5%8F%AF&color=f59e0b)](LICENSE)
 
-[下载](#下载) · [功能](#功能) · [快速开始](#快速开始) · [访问方式](#访问方式) · [管理面板](#管理面板) · [配置](#配置) · [更新日志](CHANGELOG.md)
+[下载](#下载) · [功能](#功能) · [快速开始](#快速开始) · [访问方式](#访问方式) · [管理面板](#管理面板) · [配置](#配置) · [贡献者致谢](#贡献者致谢) · [更新日志](CHANGELOG.md)
 
 </div>
 
@@ -331,6 +331,16 @@ bash scripts/package-arm-offline.sh node_modules-arm64-<sha>.tar.gz  # ARM：用
 - 面板「安装更新」需要一次性 sudo 授权；一键下载固定取 iframe 变体
 - ARM 版与 x86 同一套打包流程，但作者未在 ARM 实机上做自动化测试；原生模块要求 glibc ≥ 2.28
 - 离线包缺失而回退在线安装时，需要 nodejs_v24；如 node-pty 等原生模块需要重编译，还需 `sudo apt install -y build-essential`
+
+## 贡献者致谢
+
+<p>
+  <a href="https://github.com/techysy" title="techysy — 主要维护者"><img src="https://github.com/techysy.png?size=80" width="48" height="48" alt="techysy" /></a>
+  <a href="https://github.com/xiehuc" title="xiehuc — #5 反馈 + cordis.patch.yml 保留修复 PR"><img src="https://github.com/xiehuc.png?size=80" width="48" height="48" alt="xiehuc" /></a>
+  <a href="https://github.com/fffy520" title="fffy520 — #2 工作区落共享目录建议"><img src="https://github.com/fffy520.png?size=80" width="48" height="48" alt="fffy520" /></a>
+  <a href="https://github.com/wendellace" title="wendellace — #3 prefix 路由 400 反馈"><img src="https://github.com/wendellace.png?size=80" width="48" height="48" alt="wendellace" /></a>
+  <a href="https://github.com/ayscb" title="ayscb — #7 5ddd 域名反馈"><img src="https://github.com/ayscb.png?size=80" width="48" height="48" alt="ayscb" /></a>
+</p>
 
 ## 许可证
 
