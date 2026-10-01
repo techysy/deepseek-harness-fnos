@@ -7,7 +7,7 @@
 ### 🐛 修复
 
 - **`cordis.patch.yml` 启动被覆盖导致 UI 配置丢失（#5）**：`cmd/main` 原来每次 start 都整文件覆盖该文件，而 0.1.7+ 起 UI 设置也写入这里，导致重启即丢。改为**幂等 upsert** —— 只增改 `webserver` 的 `host`/`port`，其余插件配置、注释与空行原样保留；python3 不可用时回退原整文件写入
-- **共享布局下的两处落点修正（#2 真机验证中发现）**：① `cordis.patch.yml` 的 upsert 原写在数据区 `DSH_HOME`，而共享布局下 dsh 读的是 `@appshare` 的 HOME —— 绑定配置会被 dsh 判为缺失并以空模板重建，`0.0.0.0` 随之失效，现改写实际生效的 `HOME_DIR`；② 新装机时 dsh 会直接在共享 HOME 里现生成 `.credentials.yaml`，启动时自动归位数据区并软链回去，保证凭据始终不落共享目录
+- **共享布局下的三处落点修正（#2 真机验证中发现）**：① `cordis.patch.yml` 的 upsert 原写在数据区 `DSH_HOME`，而共享布局下 dsh 读的是 `@appshare` 的 HOME —— 绑定配置会被 dsh 判为缺失并以空模板重建，`0.0.0.0` 随之失效，现改写实际生效的 `HOME_DIR`；② upsert 把 `port` 写成带引号字符串（`port: "28000"`），dsh 0.2.0 schema 校验 `$.port expected number` 直接拒绝，webserver 插件激活失败、整个 web 起不来 —— 现按类型写入（host 带引号 / port 裸数字）；③ 新装机时 dsh 会直接在共享 HOME 里现生成 `.credentials.yaml`，启动时自动归位数据区并软链回去，保证凭据始终不落共享目录
 - **飞牛 `5ddd.com` 域名无法打开（#7）**：`fnos.net` / `5ddd.com` 两条后缀均内置进信任列表（`cmd/main` 的 `--trusted-host` + 28001 面板围栏），子域自动匹配，用户无需手填
 
 ### ✨ 变更

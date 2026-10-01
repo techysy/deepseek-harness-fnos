@@ -294,9 +294,12 @@ if cfg is None:                       # 该块没有 config: → 补一行
     cfg = len(block) - 1
 v_ind = indent_of(block[cfg]) + "  "
 def upsert(key, value):
+    # value 原样写入: host 是 YAML 字符串 (自带引号), port 必须是裸数字 —
+    # dsh 0.2.0 schema 校验 $.port expected number, 写成 "28000" 会让
+    # webserver 插件激活失败 → 整个 web 起不来
     for k in range(cfg + 1, len(block)):
         if re.match(r'^[ \t]*' + key + r':[ \t]', block[k]):
-            block[k] = "{} {}: \"{}\"\n".format(v_ind, key, value)
+            block[k] = "{} {}: {}\n".format(v_ind, key, value)
             return
     insert_at = len(block)
     for k in range(cfg + 1, len(block)):
@@ -304,8 +307,8 @@ def upsert(key, value):
             insert_at = k + 1
     if insert_at == len(block) and block and not block[-1].endswith("\n"):
         block[-1] += "\n"
-    block.insert(insert_at, "{} {}: \"{}\"\n".format(v_ind, key, value))
-upsert("host", "0.0.0.0")
+    block.insert(insert_at, "{} {}: {}\n".format(v_ind, key, value))
+upsert("host", '"0.0.0.0"')
 upsert("port", port)
 # 归一化 webserver 块缩进 (2/4 空格), 保持文件整洁且与上游生成格式一致
 for k, ln in enumerate(block):
