@@ -151,6 +151,17 @@ sudo chmod 440 /etc/sudoers.d/dsh-hotfix
 
 白名单是永久生效的精确路径授权：仅允许 `appcenter-cli install-fpk` 安装该目录内的 fpk，无法执行其他命令。授权状态面板会自动探测显示；若下载目录换到其他授权目录，按面板提示更新白名单路径即可。不授权则按钮提示失败，可改用应用中心手动安装（fpk 已下载在工作区 `update/` 或所选下载目录）。
 
+### 独立桌面窗口应用（DSH 管理面板）
+
+由于 fnOS 架构限制每个 fpk 安装包仅允许注册一个桌面启动图标（`desktop_applaunchname`），为了让用户在飞牛桌面上拥有独立的 **DSH 管理面板** 快捷窗口（类似 [Hermes Agent](https://github.com/techysy/hermes-dashboard-fnos)），本项目提供了独立的伴生桌面窗口应用：
+
+- **应用标识**：`dsh-dashboard`（桌面名称「**DSH 管理面板**」）
+- **通用架构**：纯 Python 标准库网关代理，跨平台兼容（`platform = all`，单个 fpk 支持 x86_64 与 ARM64）
+- **网关集成**：支持 fnOS 统一网关（`microApp: true`）与 DDNS 远程访问，自动将路径重写与 Host 回环映射，透明代理至本机 `127.0.0.1:28001`
+- **独立维护**：源码位于本仓库 `dashboard-app/` 目录，由独立的 GitHub Actions 工作流（`.github/workflows/build-dashboard-app.yml`）按需手动打包，无需频繁与上游 dsh 同步
+
+安装主程序 `dsh` 后，直接在 Releases 下载 `dsh-dashboard-v1.0.1.fpk` 在应用中心手动安装，即可在飞牛桌面获得独立的管理面板窗口图标。
+
 <details>
 <summary><b>旧版本 fpk 加装管理面板</b></summary>
 
@@ -242,6 +253,10 @@ deepseek-harness-fnos/
 │   ├── dashboard.js             28001 管理面板
 │   ├── proxy.py                 统一网关代理（app.sock → 127.0.0.1:28000）
 │   └── patch_settings_memory.py 设置页 memory→host 补丁
+├── dashboard-app/               DSH 管理面板独立桌面窗口应用（伴生 fpk 包，platform = all 通用架构）
+│   ├── app/ui/config            桌面入口配置（iframe / microApp: true / app.sock）
+│   ├── cmd/main · proxy.py      生命周期脚本与网关代理（/app/dsh-dashboard → 127.0.0.1:28001）
+│   └── manifest · VERSION       dsh-dashboard 应用清单与版本
 ├── config/                      privilege（run-as package）· resource（data-share 声明）
 ├── wizard/                      install（安装向导）· config（应用设置页）
 ├── scripts/                     离线打包、ARM node_modules 构建、补丁注入、401 热修、Release 通知、临时测试脚本
@@ -266,6 +281,14 @@ gh workflow run build-fpk.yml --ref main -f arch=x86     # 或 -f arch=arm（默
 gh run watch                                             # 产物: gh run download <run-id>
 # 打包完成后直接上传到 Release（不存在则创建，同名资产覆盖）
 gh workflow run build-fpk.yml -f arch=x86 -f release_tag=v0.1.7-rc.2
+```
+
+**伴生管理面板窗口应用在线打包**：`build-dashboard-app.yml`，按需手动触发
+
+```bash
+gh workflow run build-dashboard-app.yml --ref main
+# 可选：直接上传到指定 Release
+gh workflow run build-dashboard-app.yml -f release_tag=v1.0.1
 ```
 
 | 输入 | 说明 | 默认 |

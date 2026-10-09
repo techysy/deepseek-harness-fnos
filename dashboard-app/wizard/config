@@ -1,0 +1,27 @@
+[
+  {
+    "stepTitle": "目标管理面板配置",
+    "items": [
+      {
+        "type": "text",
+        "field": "target_ip",
+        "label": "目标 IP / 域名",
+        "placeholder": "127.0.0.1",
+        "initValue": "",
+        "desc": "要打开的 DSH 管理面板地址（本机默认 127.0.0.1，也可填写局域网其他 NAS IP）。只填 IP 或域名，不要带 http://，端口单独填下一项。留空保留当前设置。"
+      },
+      {
+        "type": "text",
+        "field": "target_port",
+        "label": "目标端口",
+        "placeholder": "28001",
+        "initValue": "",
+        "desc": "DSH 管理面板端口号（纯数字，默认 28001）。不要带冒号。留空保留当前设置。"
+      },
+      {
+        "type": "tips",
+        "helpText": "配置保存在数据区 dashboard.conf。留空保留当前设置，修改后重启应用生效。"
+      }
+    ]
+  }
+]

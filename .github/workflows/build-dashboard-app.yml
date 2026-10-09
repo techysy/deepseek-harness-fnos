@@ -1,0 +1,87 @@
+name: Build DSH Dashboard Companion App (dsh-dashboard.fpk)
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: '可选：打包完成后自动上传资产到的 Release tag (例如 v1.0.0 或 v0.2.0-rc.2.5; 留空则仅产出 Actions Artifacts)'
+        required: false
+        default: ''
+
+concurrency:
+  group: build-dsh-dashboard-fpk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-dashboard-fpk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout deepseek-harness-fnos
+        uses: actions/checkout@v4
+
+      - name: 校验 manifest 必需字段与跨平台声明
+        run: |
+          cd dashboard-app
+          grep -qE '^appname[[:space:]]*=[[:space:]]*dsh-dashboard$' manifest \
+            || { echo "ERROR: manifest appname 必须为 dsh-dashboard"; exit 1; }
+          grep -qE '^platform[[:space:]]*=[[:space:]]*all$' manifest \
+            || { echo "ERROR: manifest platform 必须为 all (跨平台通用包)"; exit 1; }
+          grep -qE '^version[[:space:]]*=' manifest \
+            || { echo "ERROR: manifest 缺少 version"; exit 1; }
+          echo "manifest 校验通过:" && grep -E '^(appname|version|platform|desktop_applaunchname)' manifest
+
+      - name: 下载 fnpack (飞牛官方打包工具)
+        env:
+          FNPACK_VERSION: "1.2.1"
+        run: |
+          FNPACK_BIN="fnpack-${FNPACK_VERSION}-linux-amd64"
+          curl -fsSL -o /usr/local/bin/fnpack "https://static2.fnnas.com/fnpack/${FNPACK_BIN}"
+          chmod +x /usr/local/bin/fnpack
+          fnpack --help | head -3
+
+      - name: 打包 dsh-dashboard.fpk
+        run: |
+          cd dashboard-app
+          # 确保脚本有可执行权限
+          chmod +x cmd/*
+          rm -f dsh-dashboard.fpk
+          fnpack build -d .
+          [ -f dsh-dashboard.fpk ] || { echo "ERROR: fnpack build failed"; exit 1; }
+          VERSION="$(grep -E '^version[[:space:]]*=' manifest | head -1 | sed 's/.*=//;s/[[:space:]]//g')"
+          mv dsh-dashboard.fpk "dsh-dashboard-v${VERSION}.fpk"
+          ls -lh "dsh-dashboard-v${VERSION}.fpk"
+          echo "FPK_PATH=$PWD/dsh-dashboard-v${VERSION}.fpk" >> "$GITHUB_ENV"
+          echo "FPK_NAME=dsh-dashboard-v${VERSION}.fpk" >> "$GITHUB_ENV"
+          echo "APP_VER=${VERSION}" >> "$GITHUB_ENV"
+
+      - name: 上传 fpk 构件 (Actions Artifacts)
+        uses: actions/upload-artifact@v4
+        with:
+          name: dsh-dashboard-fpk-${{ github.sha }}
+          path: dashboard-app/dsh-dashboard-*.fpk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: 自动上传 Release 资产 (若输入了 release_tag)
+        if: inputs.release_tag != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.release_tag }}
+        run: |
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
+            || gh release create "$TAG" --repo "$GITHUB_REPOSITORY" \
+                 --title "DSH Dashboard $TAG" \
+                 --generate-notes
+          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber \
+            "dashboard-app/${{ env.FPK_NAME }}"
+          echo "## 📦 已自动上传 Release 资产 → \`$TAG\` (${{ env.FPK_NAME }})" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 构建完成 Summary
+        run: |
+          echo "## ✅ DSH 管理面板快捷窗口应用 (dsh-dashboard.fpk) 打包完成" >> "$GITHUB_STEP_SUMMARY"
+          echo "- 文件: \`${{ env.FPK_NAME }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- 架构: \`all\` (x86_64 与 ARM64 通用)" >> "$GITHUB_STEP_SUMMARY"
+          echo "- 产物已上传至 Artifacts" >> "$GITHUB_STEP_SUMMARY"

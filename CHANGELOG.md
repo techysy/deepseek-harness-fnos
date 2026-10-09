@@ -1,5 +1,27 @@
 # CHANGELOG
 
+##  dsh-dashboard v1.0.1 (2026-10-09)
+
+> 伴生桌面应用 `dsh-dashboard` 独立修复（主应用 fpk 不变）。修复 NAS 重启后管理面板窗口显示 `Bad Gateway` 的问题。
+
+### 🐛 修复
+
+- **重启后开机自启被陈旧 pid 文件短路（Bad Gateway）**：`cmd/main` 旧版仅用 `kill -0 <pid>` 判活。NAS 重启后 `@appdata` 中的 `proxy.pid` 残留，若该 pid 恰好被系统其他进程复用，即误判"proxy 已在运行"而跳过启动 → 统一网关 `app.sock` 无人监听 → fnOS 网关直接回 `Bad Gateway`。现在校验 `/proc/<pid>/cmdline` 确属本应用 `proxy.py` 后才认定在跑，陈旧/复用 pid 一律清理重启。
+- **启动健康检查与自愈重试**：`start` 后轮询 TCP 端口与 unix socket 端点（最长 20s），进程活着但端点不通（如开机阶段卷/软链未就绪导致 socket 绑定失败的僵尸态）时自动杀掉重试，最多 3 轮；`stop` 只杀 cmdline 确认属于本应用的进程，防 pid 复用误杀无关进程。
+- **网关 socket 绑定退避重试**：`proxy.py` 中 `app.sock` 绑定失败（开机时 `/var/apps/<app>/target` 软链或文件系统未就绪）改为带退避的内部重试；绑定最终失败视为致命错误非 0 退出，交给 `cmd/main` 重启重试，不再"进程存活但哪儿都不通"。
+- **python3 探测扩展**：兼容 `python3` 装在 `python3`（非 `python312`）依赖包或其他路径的 fnOS 环境，避免开机自启时找不到解释器静默失败。
+
+## 🚀 0.2.0-rc.2.6 (2026-10-02)
+
+> 增加独立伴生桌面窗口应用 `dsh-dashboard`（DSH 管理面板）。上游不变（0.2.0-rc.2），fpk 版本 = 上游 + 构建段 6。
+
+### ✨ 新增
+
+- **DSH 管理面板独立桌面窗口应用（`dashboard-app/`）**：由于 fnOS 架构限制每个 fpk 包仅允许声明一个桌面图标启动入口，为提供独立的 28001 管理面板窗口图标，构建了独立的伴生桌面微应用 `dsh-dashboard`（桌面名称「DSH 管理面板」）。
+  - **跨平台通用包（`platform = all`）**：纯 Python 标准库编写的零依赖原生代理，单个 fpk 支持 x86_64 与 ARM64 双架构。
+  - **统一网关与安全围栏打通**：对接 fnOS 微应用网关（`microApp: true` / `/app/dsh-dashboard/` / `app.sock`），自动去除请求网关前缀并将 Host 重写为回环地址以规避面板信任围栏，同时完成 HTML 绝对 API 路径动态重写。
+  - **独立工作流**：在 `.github/workflows/build-dashboard-app.yml` 中提供独立手动的 GitHub Actions 打包工作流，无需频繁跟随上游 dsh 重构。
+
 ## 🚀 0.2.0-rc.2.5 (2026-10-01)
 
 > 管理面板体验再强化。上游不变（0.2.0-rc.2），fpk 版本 = 上游 + 构建段 5。

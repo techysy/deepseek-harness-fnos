@@ -1,0 +1,49 @@
+#!/bin/bash
+# cmd/install_callback — 保存安装向导配置并启动代理
+set -uo pipefail
+
+APP_NAME="${TRIM_APPNAME:-dsh-dashboard}"
+APP_DIR="${TRIM_APPDEST:-/var/apps/${APP_NAME}}"
+APP_VOL="$(printf '%s' "${APP_DIR}" | sed -n 's#^\(/vol[^/]*\)/.*#\1#p')"
+DATA_DIR="${TRIM_PKGVAR:-${APP_VOL}/@appdata/${APP_NAME}}"
+LOG="${DATA_DIR}/install.log"
+CONF="${DATA_DIR}/dashboard.conf"
+
+mkdir -p "${DATA_DIR}" 2>/dev/null
+echo "[$(date '+%F %T')] install_callback start target_ip='${wizard_target_ip:-}' target_port='${wizard_target_port:-}'" >> "${LOG}"
+
+ip="${wizard_target_ip:-}"
+port="${wizard_target_port:-}"
+
+if [ -n "${ip}" ]; then
+    [ -z "${port}" ] && port="28001"
+    printf 'TARGET_IP=%s\nTARGET_PORT=%s\n' "${ip}" "${port}" > "${CONF}" 2>/dev/null
+    chmod 600 "${CONF}" 2>/dev/null
+    chown "${APP_NAME}:${APP_NAME}" "${CONF}" 2>/dev/null || true
+    echo "[$(date '+%F %T')] saved dashboard.conf: ${ip}:${port}" >> "${LOG}"
+elif [ -f "${CONF}" ]; then
+    echo "[$(date '+%F %T')] wizard_target_ip empty, keep existing dashboard.conf" >> "${LOG}"
+else
+    printf 'TARGET_IP=127.0.0.1\nTARGET_PORT=28001\n' > "${CONF}" 2>/dev/null
+    chmod 600 "${CONF}" 2>/dev/null
+    chown "${APP_NAME}:${APP_NAME}" "${CONF}" 2>/dev/null || true
+    echo "[$(date '+%F %T')] saved default dashboard.conf: 127.0.0.1:28001" >> "${LOG}"
+fi
+
+echo "[$(date '+%F %T')] install_callback done" >> "${LOG}"
+
+MAIN_SCRIPT=""
+for cand in "/var/apps/${APP_NAME}/cmd/main" "${APP_DIR}/cmd/main" "${APP_DIR}/target/cmd/main"; do
+    [ -f "$cand" ] && MAIN_SCRIPT="$cand" && break
+done
+
+(
+    sleep 2
+    if [ -n "${MAIN_SCRIPT}" ]; then
+        bash "${MAIN_SCRIPT}" start >> "${LOG}" 2>&1
+    else
+        echo "[$(date '+%F %T')] ERROR: cmd/main not found" >> "${LOG}"
+    fi
+) &
+
+exit 0

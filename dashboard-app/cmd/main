@@ -1,0 +1,230 @@
+#!/bin/bash
+# cmd/main — DSH 管理面板快捷窗口应用生命周期脚本
+# 处理 start / stop / status / restart
+#
+# 重启健壮性 (v1.0.1): NAS 重启后 pid 文件残留, 且 pid 号可能被无关进程复用.
+# 旧版只用 kill -0 判活 → 误判"proxy 已在运行" → 开机自启被短路 →
+# app.sock 无监听 → fnOS 网关直接回 "Bad Gateway".
+# 现在校验 /proc/<pid>/cmdline 确属本应用 proxy.py 后才认定在跑,
+# 并在启动后做端点健康检查 (TCP 端口或 unix socket 至少一个可连通), 失败自动重试.
+set -u
+
+APP_NAME="${TRIM_APPNAME:-dsh-dashboard}"
+APP_DIR="${TRIM_APPDEST:-/var/apps/${APP_NAME}}"
+APP_VOL=""
+
+if [ -n "${TRIM_PKGVAR:-}" ]; then
+    DATA_DIR="${TRIM_PKGVAR}"
+else
+    if [ -L "${APP_DIR}/home" ]; then
+        APP_HOME="$(readlink -f "${APP_DIR}/home")"
+        APP_VOL="$(printf '%s' "${APP_HOME}" | sed -n 's#^\(/vol[^/]*\)/.*#\1#p')"
+    fi
+    if [ -z "${APP_VOL}" ]; then
+        APP_VOL="$(printf '%s' "${APP_DIR}" | sed -n 's#^\(/vol[^/]*\)/.*#\1#p')"
+    fi
+    if [ -n "${APP_VOL}" ]; then
+        DATA_DIR="${APP_VOL}/@appdata/${APP_NAME}"
+    else
+        DATA_DIR="${APP_DIR}/var"
+    fi
+fi
+
+CMD_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROXY_PY="${CMD_DIR}/proxy.py"
+LISTEN_PORT="${TRIM_SERVICE_PORT:-28003}"
+GATEWAY_PREFIX="/app/${APP_NAME}"
+SOCK_PATH="${TRIM_APPDEST_SOCK:-/var/apps/${APP_NAME}/target/app.sock}"
+
+PROXY_LOG="${DATA_DIR}/proxy.log"
+PROXY_PID="${DATA_DIR}/proxy.pid"
+CONF="${DATA_DIR}/dashboard.conf"
+
+PYTHON_BIN=""
+for cand in /var/apps/python312/target/bin/python3 \
+            /var/apps/python3/target/bin/python3 \
+            "${APP_VOL:-}/@appcenter/python312/bin/python3" \
+            /usr/bin/python3 /usr/local/bin/python3 /bin/python3; do
+    [ -x "$cand" ] && PYTHON_BIN="$cand" && break
+done
+if [ -z "${PYTHON_BIN}" ]; then
+    for name in python3 python3.13 python3.12 python3.11 python3.10 python3.9; do
+        cand="$(command -v "$name" 2>/dev/null || true)"
+        [ -n "$cand" ] && [ -x "$cand" ] && PYTHON_BIN="$cand" && break
+    done
+fi
+[ -n "${PYTHON_BIN}" ] || PYTHON_BIN="python3"
+
+mkdir -p "${DATA_DIR}" 2>/dev/null || true
+mkdir -p "$(dirname "${SOCK_PATH}")" 2>/dev/null || true
+
+read_target() {
+    local ip port
+    ip="127.0.0.1"; port="28001"
+    if [ -f "${CONF}" ]; then
+        local v
+        v="$(grep -E '^TARGET_IP=' "${CONF}" | head -1 | cut -d= -f2- | tr -d '[:space:]')"
+        [ -n "$v" ] && ip="$v"
+        v="$(grep -E '^TARGET_PORT=' "${CONF}" | head -1 | cut -d= -f2- | tr -d '[:space:]')"
+        [ -n "$v" ] && port="$v"
+    fi
+    echo "${ip} ${port}"
+}
+
+# ── 进程身份校验 ──
+# pid_cmdline_has <pid> <pattern>: 进程存活且命令行含 pattern.
+# 防 pid 复用误判 (重启后陈旧 pid 文件指向无关进程).
+pid_cmdline_has() {
+    local pid="$1" pat="$2"
+    [ -n "${pid}" ] || return 1
+    kill -0 "${pid}" 2>/dev/null || return 1
+    if [ -r "/proc/${pid}/cmdline" ]; then
+        tr '\0' ' ' < "/proc/${pid}/cmdline" 2>/dev/null | grep -q -- "${pat}" && return 0
+        return 1
+    fi
+    ps -p "${pid}" -o args= 2>/dev/null | grep -q -- "${pat}"
+}
+
+proxy_running() {
+    [ -f "${PROXY_PID}" ] || return 1
+    pid_cmdline_has "$(cat "${PROXY_PID}" 2>/dev/null)" "proxy.py"
+}
+
+# TCP 回环端口可连通 (0.0.0.0 监听时回环必可达)
+port_alive() {
+    bash -c "exec 3<>/dev/tcp/127.0.0.1/${LISTEN_PORT}" 2>/dev/null
+}
+
+# unix socket 可连接 (fnOS 网关走的就是这条; TCP 被占用时 sock 仍是有效入口)
+sock_alive() {
+    [ -S "${SOCK_PATH}" ] || return 1
+    "${PYTHON_BIN}" -c '
+import socket, sys
+s = socket.socket(socket.AF_UNIX)
+s.settimeout(2)
+try:
+    s.connect(sys.argv[1])
+except Exception:
+    sys.exit(1)
+finally:
+    s.close()
+' "${SOCK_PATH}" 2>/dev/null
+}
+
+proxy_healthy() {
+    proxy_running && { port_alive || sock_alive; }
+}
+
+launch_proxy() {
+    LISTEN_PORT="${LISTEN_PORT}" \
+    GATEWAY_PREFIX="${GATEWAY_PREFIX}" \
+    SOCK_PATH="${SOCK_PATH}" \
+    CONF_DIR="${DATA_DIR}" \
+    TRIM_APPNAME="${APP_NAME}" \
+    TRIM_APPDEST="${APP_DIR}" \
+    nohup "${PYTHON_BIN}" "${PROXY_PY}" >> "${PROXY_LOG}" 2>&1 &
+    echo $! > "${PROXY_PID}"
+}
+
+kill_proxy() {
+    if [ -f "${PROXY_PID}" ]; then
+        # 只杀确认属于本应用的进程, 防 pid 复用误杀无关进程
+        if pid_cmdline_has "$(cat "${PROXY_PID}" 2>/dev/null)" "proxy.py"; then
+            kill "$(cat "${PROXY_PID}")" 2>/dev/null || true
+        fi
+        rm -f "${PROXY_PID}"
+    fi
+    pkill -f "${PROXY_PY}" 2>/dev/null || true
+    [ -e "${SOCK_PATH}" ] && rm -f "${SOCK_PATH}" 2>/dev/null || true
+}
+
+start() {
+    # 陈旧 pid 文件清理: pid 存在但不是本应用 proxy (重启后 pid 被复用) → 删除重来
+    if [ -f "${PROXY_PID}" ] && ! proxy_running; then
+        echo "removing stale pid file (pid $(cat "${PROXY_PID}" 2>/dev/null) is not our proxy)"
+        rm -f "${PROXY_PID}"
+    fi
+
+    if proxy_running; then
+        # 进程在但端点不通 (旧版僵尸: sock 绑定失败仍存活) → 杀掉重启自愈
+        if proxy_healthy; then
+            echo "proxy already running (pid $(cat "${PROXY_PID}"))"
+            return 0
+        fi
+        echo "WARN: proxy alive but no healthy endpoint, restarting..."
+        kill_proxy
+        sleep 1
+    fi
+
+    mkdir -p "${DATA_DIR}" 2>/dev/null || true
+    if [ ! -f "${CONF}" ]; then
+        printf 'TARGET_IP=127.0.0.1\nTARGET_PORT=28001\n' > "${CONF}" 2>/dev/null || true
+        chmod 600 "${CONF}" 2>/dev/null || true
+        echo "created default dashboard.conf (127.0.0.1:28001)"
+    fi
+
+    read -r t_ip t_port < <(read_target)
+
+    if [ ! -f "${PROXY_PY}" ]; then
+        echo "ERROR: proxy.py not found at ${PROXY_PY}" >&2
+        return 1
+    fi
+
+    mkdir -p "$(dirname "${SOCK_PATH}")" 2>/dev/null || true
+
+    # 启动 + 健康检查, 失败自动重试 (开机时卷/依赖应用尚未就绪的容错)
+    # proxy.py 内部对网关 socket 绑定自带退避重试, 这里轮询等待而不是固定 sleep,
+    # 避免误杀"正在退避重试绑定"的健康进程
+    local attempt=1 max_attempt=3 waited
+    while [ "${attempt}" -le "${max_attempt}" ]; do
+        launch_proxy
+        echo "proxy started (pid $(cat "${PROXY_PID}")) :${LISTEN_PORT} + sock:${SOCK_PATH} -> ${t_ip}:${t_port} (attempt ${attempt}/${max_attempt})"
+        waited=0
+        while [ "${waited}" -lt 20 ]; do
+            sleep 1
+            waited=$((waited + 1))
+            if ! proxy_running; then
+                break   # 进程已退出 (如 sock 绑定最终失败), 立即重试
+            fi
+            if port_alive || sock_alive; then
+                echo "proxy health OK (${waited}s)"
+                return 0
+            fi
+        done
+        echo "WARN: proxy health check failed after ${waited}s (attempt ${attempt}/${max_attempt}), retrying..." >&2
+        kill_proxy
+        attempt=$((attempt + 1))
+        [ "${attempt}" -le "${max_attempt}" ] && sleep $((attempt * 2))
+    done
+
+    echo "ERROR: proxy failed to start after ${max_attempt} attempts (check ${PROXY_LOG})" >&2
+    return 1
+}
+
+stop() {
+    kill_proxy
+    echo "proxy stopped"
+}
+
+status() {
+    if proxy_running; then
+        read -r t_ip t_port < <(read_target)
+        if port_alive || sock_alive; then
+            echo "running (pid $(cat "${PROXY_PID}")) -> ${t_ip}:${t_port}"
+            return 0
+        fi
+        echo "degraded (pid $(cat "${PROXY_PID}") alive but no listening endpoint on :${LISTEN_PORT} / ${SOCK_PATH})"
+        return 1
+    fi
+    echo "stopped"
+    return 1
+}
+
+case "${1:-start}" in
+    start) start ;;
+    stop) stop ;;
+    status) status ;;
+    restart) stop; sleep 1; start ;;
+    *) echo "Usage: $0 {start|stop|status|restart}"; exit 1 ;;
+esac
+exit 0

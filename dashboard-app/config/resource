@@ -1,0 +1,15 @@
+{
+    "data-share":
+    {
+        "shares":
+        [
+            {
+                "name": "dsh-dashboard",
+                "permission":
+                {
+                    "rw": ["dsh-dashboard"]
+                }
+            }
+        ]
+    }
+}

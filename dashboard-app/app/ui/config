@@ -1,0 +1,16 @@
+{
+  ".url": {
+    "dsh-dashboard.Application": {
+      "title": "DSH 管理面板",
+      "icon": "images/icon_{0}.png",
+      "type": "iframe",
+      "microApp": true,
+      "port": "",
+      "protocol": "http",
+      "gatewaySocket": "app.sock",
+      "gatewayPrefix": "/app/dsh-dashboard",
+      "url": "/app/dsh-dashboard/",
+      "allUsers": true
+    }
+  }
+}
