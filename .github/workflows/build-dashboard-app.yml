@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: '可选：打包完成后自动上传资产到的 Release tag (例如 v1.0.0 或 v0.2.0-rc.2.5; 留空则仅产出 Actions Artifacts)'
+        description: '可选：打包完成后把 fpk 作为附加产物上传到的既有 Release tag（dsh 主应用的 tag，例如 v0.2.0-rc.2.5；伴生应用不单独打 tag；留空则仅产出 Actions Artifacts）'
         required: false
         default: ''
 
@@ -71,13 +71,13 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ inputs.release_tag }}
         run: |
+          # 伴生应用不单独建 Release: 只把 fpk 作为附加产物挂到 dsh 主应用已有的 Release 上。
+          # tag 不存在时直接失败, 避免误创建独立 Release 抢占 /releases/latest。
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
-            || gh release create "$TAG" --repo "$GITHUB_REPOSITORY" \
-                 --title "DSH Dashboard $TAG" \
-                 --generate-notes
+            || { echo "ERROR: Release tag $TAG 不存在 (应传 dsh 主应用的既有 tag, 本伴生应用不单独打 tag)"; exit 1; }
           gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber \
             "dashboard-app/${{ env.FPK_NAME }}"
-          echo "## 📦 已自动上传 Release 资产 → \`$TAG\` (${{ env.FPK_NAME }})" >> "$GITHUB_STEP_SUMMARY"
+          echo "## 📦 已附加产物到 dsh Release → \`$TAG\` (${{ env.FPK_NAME }})" >> "$GITHUB_STEP_SUMMARY"
 
       - name: 构建完成 Summary
         run: |

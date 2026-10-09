@@ -287,8 +287,8 @@ gh workflow run build-fpk.yml -f arch=x86 -f release_tag=v0.1.7-rc.2
 
 ```bash
 gh workflow run build-dashboard-app.yml --ref main
-# 可选：直接上传到指定 Release
-gh workflow run build-dashboard-app.yml -f release_tag=v1.0.1
+# 可选：把 fpk 作为附加产物挂到 dsh 主应用已有的 Release 上（伴生应用不单独打 tag）
+gh workflow run build-dashboard-app.yml -f release_tag=v0.2.0-rc.2.5
 ```
 
 | 输入 | 说明 | 默认 |
