@@ -227,4 +227,5 @@ case "${1:-start}" in
     restart) stop; sleep 1; start ;;
     *) echo "Usage: $0 {start|stop|status|restart}"; exit 1 ;;
 esac
-exit 0
+# 注意: 不要在这里加 exit 0 — fnOS 依据本脚本退出码判断应用运行状态,
+# 恒 0 会掩盖 status 的真实结果, 导致应用中心重启时状态机误判并清掉刚拉起的 proxy

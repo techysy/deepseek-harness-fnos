@@ -1,5 +1,13 @@
 # CHANGELOG
 
+##  dsh-dashboard v1.0.2 (2026-10-09)
+
+> 伴生桌面应用 `dsh-dashboard` 独立修复（主应用 fpk 不变）。修复应用中心"重启应用"后管理面板窗口 `Bad Gateway` / 连接拒绝的问题。
+
+### 🐛 修复
+
+- **应用中心重启后服务被 fnOS 误判回收**：`cmd/main` 末尾恒 `exit 0` 掩盖了 `status` 分支的真实退出码。fnOS 依据 `cmd/main status` 的退出码判定应用运行状态，误判"未运行"后在 start 之后回收刚拉起的 proxy → 网关 `app.sock` / `28003` 无人监听 → 窗口 `Bad Gateway`。改为透传 case 分支退出码（running→0 / 其他→1）。NAS 上 stop→start 全周期 A/B 验证：带 `exit 0` 必现，删除后进程存活。同根因见 HermesAgent v1.2.6。
+
 ##  dsh-dashboard v1.0.1 (2026-10-09)
 
 > 伴生桌面应用 `dsh-dashboard` 独立修复（主应用 fpk 不变）。修复 NAS 重启后管理面板窗口显示 `Bad Gateway` 的问题。

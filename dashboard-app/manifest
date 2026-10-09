@@ -1,8 +1,8 @@
 appname               = dsh-dashboard
-version               = 1.0.1
+version               = 1.0.2
 display_name          = DSH 管理面板
 desc                  = DeepSeek Harness 管理面板快捷入口 — 独立的桌面窗口应用，直接访问 DSH 管理面板（:28001），提供服务监控、版本更新、出站代理、插件管理与实时日志查看。
-changelog             = v1.0.1：修复 NAS 重启后开机自启被陈旧 pid 文件误判短路导致 Bad Gateway 的问题 — 增加进程身份校验（cmdline 确认属本应用）、启动后端点健康检查与自动重试、统一网关 socket 绑定退避、python3 探测扩展。
+changelog             = v1.0.1：修复 NAS 重启后开机自启被陈旧 pid 文件误判短路导致 Bad Gateway 的问题 — 增加进程身份校验（cmdline 确认属本应用）、启动后端点健康检查与自动重试、统一网关 socket 绑定退避、python3 探测扩展。 v1.0.2 修复: 应用中心重启后 fnOS 依据 cmd/main 退出码判活被恒 exit 0 误导而清掉 proxy — 已透传真实退出码
 platform              = all
 source                = thirdparty
 maintainer            = techysy

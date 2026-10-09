@@ -160,7 +160,7 @@ sudo chmod 440 /etc/sudoers.d/dsh-hotfix
 - **网关集成**：支持 fnOS 统一网关（`microApp: true`）与 DDNS 远程访问，自动将路径重写与 Host 回环映射，透明代理至本机 `127.0.0.1:28001`
 - **独立维护**：源码位于本仓库 `dashboard-app/` 目录，由独立的 GitHub Actions 工作流（`.github/workflows/build-dashboard-app.yml`）按需手动打包，无需频繁与上游 dsh 同步
 
-安装主程序 `dsh` 后，直接在 Releases 下载 `dsh-dashboard-v1.0.1.fpk` 在应用中心手动安装，即可在飞牛桌面获得独立的管理面板窗口图标。
+安装主程序 `dsh` 后，直接在 Releases 下载 `dsh-dashboard-v1.0.2.fpk` 在应用中心手动安装，即可在飞牛桌面获得独立的管理面板窗口图标。
 
 <details>
 <summary><b>旧版本 fpk 加装管理面板</b></summary>
