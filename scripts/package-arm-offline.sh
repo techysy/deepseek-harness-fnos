@@ -116,7 +116,25 @@ build_variant "iframe" "iframe" "-iframe"
 # 还原原始 config
 cp "${WORKSPACE_BAK:-/tmp/dsh-ui-config.bak}" app/ui/config
 
-# ---- 5. 复制到交付目录 (chmod 644) ----
+# ---- 5. 打包伴生桌面应用 (dsh-dashboard.fpk) ----
+if [ -d "${SRC_DIR}/dashboard-app" ]; then
+  echo "==> 打包伴生应用 dsh-dashboard.fpk ..."
+  cd "${SRC_DIR}/dashboard-app"
+  chmod +x cmd/* 2>/dev/null || true
+  rm -f dsh-dashboard*.fpk
+  fnpack build -d .
+  if [ -f "dsh-dashboard.fpk" ]; then
+    DASH_VER="$(grep -E '^version[[:space:]]*=' manifest | head -1 | sed 's/.*=//;s/[[:space:]]//g')"
+    mv dsh-dashboard.fpk "dsh-dashboard-v${DASH_VER}.fpk"
+    echo "==> 伴生应用打包完成: dsh-dashboard-v${DASH_VER}.fpk"
+    cp "dsh-dashboard-v${DASH_VER}.fpk" "${DELIVERY_NEW}/" && chmod 644 "${DELIVERY_NEW}/dsh-dashboard-v${DASH_VER}.fpk"
+  else
+    echo "警告: dashboard-app fnpack build 未生成 fpk, 跳过交付" >&2
+  fi
+  cd "${SRC_DIR}"
+fi
+
+# ---- 6. 复制到交付目录 (chmod 644) ----
 echo "==> 交付到 ${DELIVERY_NEW} ..."
 mkdir -p "${DELIVERY_NEW}" "${DELIVERY_OLD}"
 # 移走旧 ARM fpk 到历史
@@ -135,6 +153,9 @@ echo "==============================================================="
 echo "✅ ARM 离线安装包已生成并交付:"
 echo "   ${DELIVERY_NEW}/dsh-${VERSION}-arm.fpk         (url 版)"
 echo "   ${DELIVERY_NEW}/dsh-${VERSION}-iframe-arm.fpk  (iframe 版)"
+if compgen -G "${DELIVERY_NEW}/dsh-dashboard-*.fpk" >/dev/null 2>&1; then
+  echo "   ${DELIVERY_NEW}/dsh-dashboard-v*.fpk     (伴生桌面管理面板应用)"
+fi
 echo ""
 echo "   部署到 ARM fnOS 设备: 应用中心 → 手动安装 → 选对应架构 fpk"
 echo "   说明: 内置 ARM64 node_modules (glibc≤2.28 兼容), 免联网"

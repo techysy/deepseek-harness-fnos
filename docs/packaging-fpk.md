@@ -32,12 +32,13 @@
   `upstream + "."` 开头（构建段）均视为已是最新；上游有更新版本时正常提示升级
 - README 的 **dsh 徽章**显示上游版本；「当前版本」与 fpk 文件名显示 fpk 版本
 
-每次打包产出两个变体（`<ver>` 取自 `manifest` 的 `version`）：
+每次打包产出两个主变体，并在 Release 资产中包含伴生管理面板应用（`<ver>` 取自 `manifest` 的 `version`）：
 
 | 文件 | 打开方式 | 用途 |
 |------|---------|------|
 | `dsh-<ver>-<arch>.fpk` | url（新标签页） | 桌面图标 → 浏览器新标签打开 |
 | `dsh-<ver>-iframe-<arch>.fpk` | iframe（桌面窗口内） | 桌面窗口内嵌打开（推荐） |
+| `dsh-dashboard-v<ver>.fpk` | iframe（桌面窗口微应用） | 伴生独立桌面管理面板窗口应用（`platform = all` 通用包，x86/ARM 共用） |
 
 `<arch>`：`x86`（Actions x86 路径 / 离线脚本）或 `arm`（Actions ARM 路径）。
 离线包含 `app/server/node_modules`（npm install 扁平自包含布局，无 symlink），安装免联网。

@@ -184,6 +184,21 @@ jobs:
           ls -lh "dsh-${VERSION}-iframe-${{ inputs.arch }}.fpk"
           echo "FPK_IFRAME=$PWD/dsh-${VERSION}-iframe-${{ inputs.arch }}.fpk" >> "$GITHUB_ENV"
 
+      # ── 打包伴生桌面应用 dsh-dashboard.fpk (通用跨平台架构) ──────────
+      - name: 打包伴生桌面应用 (dsh-dashboard.fpk)
+        if: inputs.release_tag != ''
+        run: |
+          cd dashboard-app
+          chmod +x cmd/*
+          rm -f dsh-dashboard*.fpk
+          fnpack build -d .
+          [ -f dsh-dashboard.fpk ] || { echo "ERROR: dashboard-app fnpack build failed"; exit 1; }
+          DASH_VER="$(grep -E '^version[[:space:]]*=' manifest | head -1 | sed 's/.*=//;s/[[:space:]]//g')"
+          mv dsh-dashboard.fpk "dsh-dashboard-v${DASH_VER}.fpk"
+          echo "DASH_FPK=dashboard-app/dsh-dashboard-v${DASH_VER}.fpk" >> "$GITHUB_ENV"
+          echo "DASH_NAME=dsh-dashboard-v${DASH_VER}.fpk" >> "$GITHUB_ENV"
+          ls -lh "dsh-dashboard-v${DASH_VER}.fpk"
+
       # ── 上传产物 ──────────────────────────────────────────────────────
       - name: Upload fpk artifacts
         uses: actions/upload-artifact@v4
@@ -196,8 +211,9 @@ jobs:
           retention-days: 14
 
       # ── 自动上传 Release 资产 (release_tag 输入非空时) ────────────────
-      # 双架构两次 dispatch 各传自己的 2 个 fpk 到同一 Release; Release 不存在
-      # 时创建 (generate-notes 占位, 发布者随后用正式 notes 覆盖 body)。
+      # 双架构两次 dispatch 各传自己的 2 个 fpk 到同一 Release; 同时附加上传
+      # 通用架构的伴生桌面微应用 dsh-dashboard-v*.fpk 到 Release 资产列表。
+      # Release 不存在时创建 (generate-notes 占位, 发布者随后用正式 notes 覆盖 body)。
       # --clobber 幂等: 同名资产覆盖, 重跑安全。
       - name: 自动上传 Release 资产
         if: inputs.release_tag != ''
@@ -212,8 +228,9 @@ jobs:
                  --generate-notes
           gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber \
             "dsh-${VERSION}-${{ inputs.arch }}.fpk" \
-            "dsh-${VERSION}-iframe-${{ inputs.arch }}.fpk"
-          echo "## 📦 已自动上传 Release 资产 → \`$TAG\` (${{ inputs.arch }})" >> "$GITHUB_STEP_SUMMARY"
+            "dsh-${VERSION}-iframe-${{ inputs.arch }}.fpk" \
+            "${{ env.DASH_FPK }}"
+          echo "## 📦 已自动上传 Release 资产 → \`$TAG\` (${{ inputs.arch }} + ${{ env.DASH_NAME }})" >> "$GITHUB_STEP_SUMMARY"
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name'
 
       - name: Summary

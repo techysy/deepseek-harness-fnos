@@ -454,19 +454,23 @@ if old3 in s and new3 not in s:
 # 已属于 loopback / --trusted-host 白名单 — 与上面特权 API 放行是同一信任决策.
 old4 = "isAuthenticated(request) {\n\t\tconst authority = requestAuthority(request.headers);"
 new4 = "isAuthenticated(request) {\n\t\treturn true; /* fnos-fpk: browser token auth off, host/origin trust fence is the gate */\n\t\tconst authority = requestAuthority(request.headers);"
+old4b = "isAuthenticated(request, secure = false) {\n\t\treturn this.authenticate(request, secure)?.version === COOKIE_PAYLOAD_VERSION;"
+new4b = "isAuthenticated(request, secure = false) {\n\t\treturn true; /* fnos-fpk: browser token auth off, host/origin trust fence is the gate */\n\t\treturn this.authenticate(request, secure)?.version === COOKIE_PAYLOAD_VERSION;"
 if old4 in s and new4 not in s:
     s = s.replace(old4, new4); changed = True
+elif old4b in s and new4b not in s:
+    s = s.replace(old4b, new4b); changed = True
 if changed:
     open(p, "w", encoding="utf-8").write(s)
     print("privileged-fence patched" if new1 in s or new2 in s else "privileged-fence already patched", end="")
-    print(" + browser-auth bypassed" if new4 in s else " + browser-auth patch FAILED (pattern mismatch)")
+    print(" + browser-auth bypassed" if (new4 in s or new4b in s) else " + browser-auth patch FAILED (pattern mismatch)")
 elif "isTrustedApiRequest(request, this.trustedHosts)" in s or "isTrustedApiRequest(request, trustedHosts)" in s:
     print("privileged-fence native in upstream (>=0.1.2), no patch needed")
 else:
     print("privileged-fence already patched")
-if new4 in s:
+if new4 in s or new4b in s:
     print("browser-auth: token auth off (trust fence only); launch-token URLs still redirect to clean /")
-elif old4 in s:
+elif old4 in s or old4b in s:
     print("WARNING: browser-auth patch did not apply — desktop entry will 401 until token URL visited")
 PATCHPY
 2>&1)
@@ -486,7 +490,9 @@ const reps = [
   ["const trustedHosts = options.authority === \"loopback\" ? [] : this.trustedHosts;",
    "const trustedHosts = this.trustedHosts;"],
   ["isAuthenticated(request) {\n\t\tconst authority = requestAuthority(request.headers);",
-   "isAuthenticated(request) {\n\t\treturn true; /* fnos-fpk: browser token auth off, host/origin trust fence is the gate */\n\t\tconst authority = requestAuthority(request.headers);"]
+   "isAuthenticated(request) {\n\t\treturn true; /* fnos-fpk: browser token auth off, host/origin trust fence is the gate */\n\t\tconst authority = requestAuthority(request.headers);"],
+  ["isAuthenticated(request, secure = false) {\n\t\treturn this.authenticate(request, secure)?.version === COOKIE_PAYLOAD_VERSION;",
+   "isAuthenticated(request, secure = false) {\n\t\treturn true; /* fnos-fpk: browser token auth off, host/origin trust fence is the gate */\n\t\treturn this.authenticate(request, secure)?.version === COOKIE_PAYLOAD_VERSION;"]
 ];
 for (const [o, n] of reps) { if (s.includes(o) && !s.includes(n)) { s = s.split(o).join(n); changed = true; } }
 if (changed) { fs.writeFileSync(p, s); console.log("node fallback: patched"); }

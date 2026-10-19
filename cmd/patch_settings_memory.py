@@ -78,6 +78,11 @@ def main():
             skipped.append(path)
             continue
         if not TERNARY.search(content):
+            # 0.2.1+ 起上游重构移除了 isLoopback ? "host" : "memory" 限制, Settings 服务原生放行非回环
+            if "class SettingsDescribeMirror" in content or "SettingsDescribeMirror" in content:
+                print(f"INFO: Settings 服务已原生支持非回环访问 (0.2.1+ 重构架构): {path}")
+                skipped.append(path)
+                continue
             print(f"WARN: isLoopback ternary not found (上游已修复或改写?): {path}")
             skipped.append(path)
             continue
@@ -99,8 +104,11 @@ def main():
         print("  +", p)
     for p in skipped:
         print("  = (skipped)", p)
-    # settings 主包必须命中, 否则 LAN 访问设置页空白
-    if not modified and not any(MARKER in open(p, encoding="utf-8").read() for p in targets):
+    # settings 主包若未命中且未打过标记，且非 0.2.1+ 原生支持架构，才视为异常退出
+    if not modified and not any(
+        MARKER in open(p, encoding="utf-8").read() or "SettingsDescribeMirror" in open(p, encoding="utf-8").read()
+        for p in targets
+    ):
         sys.exit(1)
 
 

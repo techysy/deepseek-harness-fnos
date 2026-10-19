@@ -133,7 +133,25 @@ d['.url']['dsh.Application']['type']='iframe'
 json.dump(d,open(p,'w'),ensure_ascii=False,indent=2)
 "
 
-# ---- 6. 交付 ----
+# ---- 6. 打包伴生桌面应用 (dsh-dashboard.fpk) ----
+if [ -d "${SRC_DIR}/dashboard-app" ]; then
+  echo "==> 打包伴生应用 dsh-dashboard.fpk ..."
+  cd "${SRC_DIR}/dashboard-app"
+  chmod +x cmd/* 2>/dev/null || true
+  rm -f dsh-dashboard*.fpk
+  fnpack build -d .
+  if [ -f "dsh-dashboard.fpk" ]; then
+    DASH_VER="$(grep -E '^version[[:space:]]*=' manifest | head -1 | sed 's/.*=//;s/[[:space:]]//g')"
+    mv dsh-dashboard.fpk "dsh-dashboard-v${DASH_VER}.fpk"
+    echo "==> 伴生应用打包完成: dsh-dashboard-v${DASH_VER}.fpk"
+    cp "dsh-dashboard-v${DASH_VER}.fpk" "${DELIVERY_NEW}/" && chmod 644 "${DELIVERY_NEW}/dsh-dashboard-v${DASH_VER}.fpk"
+  else
+    echo "警告: dashboard-app fnpack build 未生成 fpk, 跳过交付" >&2
+  fi
+  cd "${SRC_DIR}"
+fi
+
+# ---- 7. 交付 ----
 echo "==> 交付到 ${DELIVERY_NEW} ..."
 mkdir -p "${DELIVERY_NEW}" "${DELIVERY_OLD}"
 if compgen -G "${DELIVERY_NEW}/dsh-*-x86.fpk" >/dev/null 2>&1; then
@@ -148,5 +166,8 @@ echo "==============================================================="
 echo "✅ x86 离线安装包已生成并交付:"
 echo "   ${DELIVERY_NEW}/dsh-${VERSION}-x86.fpk         (url 版)"
 echo "   ${DELIVERY_NEW}/dsh-${VERSION}-iframe-x86.fpk  (iframe 版)"
+if compgen -G "${DELIVERY_NEW}/dsh-dashboard-*.fpk" >/dev/null 2>&1; then
+  echo "   ${DELIVERY_NEW}/dsh-dashboard-v*.fpk     (伴生桌面管理面板应用)"
+fi
 echo "   部署: 应用中心 → 手动安装 → 选 dsh-${VERSION}-iframe-x86.fpk"
 echo "==============================================================="
