@@ -760,6 +760,64 @@ stop() {
     return 0
 }
 
+hot_apply() {
+    local fpk="${1:-}"
+    if [ -z "${fpk}" ] || [ ! -f "${fpk}" ]; then
+        echo "ERROR: fpk 文件不存在: ${fpk}" >&2
+        return 1
+    fi
+    log "hot-apply: 开始执行原地热安装: ${fpk}"
+    # 临时目录
+    local tmp_dir="/tmp/dsh_hotapply_$$"
+    mkdir -p "${tmp_dir}" || return 1
+
+    # 1. 解压 fpk 外层归档提取 app.tgz, cmd, manifest
+    if ! tar -zxf "${fpk}" -C "${tmp_dir}" 2>/dev/null; then
+        echo "ERROR: 解包 fpk 失败" >&2
+        rm -rf "${tmp_dir}"
+        return 1
+    fi
+
+    # 2. 停服务
+    stop
+
+    # 3. 覆盖 target 目录应用产物 (server / ui / config)
+    local target_dir="${APP_DIR}/target"
+    if [ -d "${target_dir}" ] && [ -f "${tmp_dir}/app.tgz" ]; then
+        log "hot-apply: 覆盖解压 app.tgz 到 ${target_dir} ..."
+        tar -zxf "${tmp_dir}/app.tgz" -C "${target_dir}"
+        chown -R dsh:dsh "${target_dir}" 2>/dev/null || true
+    fi
+
+    # 4. 同步更新 cmd/ 下的脚本与 manifest
+    if [ -d "${tmp_dir}/cmd" ]; then
+        cp -a "${tmp_dir}/cmd"/* "${CMD_DIR}/" 2>/dev/null || true
+        chmod +x "${CMD_DIR}"/* 2>/dev/null || true
+    fi
+    if [ -f "${tmp_dir}/manifest" ]; then
+        cp -f "${tmp_dir}/manifest" "${APP_DIR}/manifest" 2>/dev/null || true
+    fi
+
+    rm -rf "${tmp_dir}"
+    log "hot-apply: 产物覆盖完成，重新启动服务 ..."
+
+    # 5. 启动服务 (以 dsh 用户身份拉起，避免 root 身份残留占用端口)
+    if [ "$(id -u)" -eq 0 ] && id dsh >/dev/null 2>&1; then
+        su -s /bin/bash dsh -c "${CMD_DIR}/main start"
+    else
+        start
+    fi
+    local ret=$?
+    if [ $ret -eq 0 ]; then
+        log "hot-apply: 热安装完成，服务运行正常"
+        echo "hot-apply: success"
+    else
+        log "hot-apply: 服务重启失败"
+        echo "hot-apply: failed" >&2
+    fi
+    return $ret
+}
+
 status() {
     if [ -f "${DSH_PID}" ] && kill -0 "$(cat "${DSH_PID}")" 2>/dev/null; then
         echo "dsh web: running (pid $(cat "${DSH_PID}"))"
@@ -775,5 +833,6 @@ case "${1:-}" in
     stop) stop ;;
     status) status ;;
     restart) stop; sleep 1; start ;;
-    *) echo "usage: $0 {start|stop|status|restart}"; exit 1 ;;
+    hot-apply) shift; hot_apply "$@" ;;
+    *) echo "usage: $0 {start|stop|status|restart|hot-apply <fpk>}"; exit 1 ;;
 esac

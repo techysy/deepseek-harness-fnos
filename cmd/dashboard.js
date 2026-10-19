@@ -470,9 +470,8 @@ function updateFiles() {
 }
 // sudo 授权探测 (issue #4): sudo -n -l 只列规则不执行命令, 安全.
 // 按**实际文件路径**校验: sudoers 白名单路径必须覆盖当前下载目录里的 fpk,
-// 不能只看命令里有没有 install-fpk (共享布局后 update 目录搬到 @appshare,
-// 旧 @appdata 白名单对它失效 — 真机踩过: 面板显示已授权, 实际 sudo 拒绝).
-function sudoAuthorized() {
+// 支持 install-fpk 或 hot-apply 命令.
+function sudoAuthorized(cmd = "install-fpk") {
   const dir = selectedUpdateDir();
   const files = updateFiles();
   const probe = path.join(dir, files.map(f => f.name).sort().pop() || "probe.fpk");
@@ -482,22 +481,25 @@ function sudoAuthorized() {
     if (r.status !== 0) return false;
     out = (r.stdout || "") + (r.stderr || "");
   } catch { return false; }
-  const ruleRe = /NOPASSWD:\s*(\S+\s+install-fpk\s+(\S+))/g;
-  let m;
-  while ((m = ruleRe.exec(out))) {
-    if (!m[2]) continue;
-    const argRe = new RegExp("^" + m[2].replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".") + "$");
-    if (argRe.test(probe)) return true;
+  const nopasswd = out.split("NOPASSWD:")[1] || "";
+  const entries = nopasswd.split(",").map(s => s.trim());
+  for (const e of entries) {
+    if (e.includes(cmd)) {
+      const parts = e.split(/\s+/);
+      const pat = parts[parts.length - 1];
+      const re = new RegExp("^" + pat.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".") + "$");
+      if (re.test(probe)) return true;
+    }
   }
   return false;
 }
-// sudoers 白名单跟随所选目录生成: 卷号通配 (/vol4 → /vol*), 其余精确匹配
+// sudoers 白名单跟随所选目录生成: 卷号通配 (/vol4 → /vol*), 支持官方 install-fpk 与原地 hot-apply
 function sudoHintFor(dir) {
   const pat = dir.replace(/^\/(vol\d+)/, "/vol*") + "/*";
-  return "echo 'dsh ALL=(root) NOPASSWD: /usr/local/bin/appcenter-cli install-fpk " + pat + "' | sudo tee /etc/sudoers.d/dsh-hotfix\nsudo chmod 440 /etc/sudoers.d/dsh-hotfix";
+  return "echo 'dsh ALL=(root) NOPASSWD: /usr/local/bin/appcenter-cli install-fpk " + pat + ", /var/apps/dsh/cmd/main hot-apply " + pat + "' | sudo tee /etc/sudoers.d/dsh-hotfix\nsudo chmod 440 /etc/sudoers.d/dsh-hotfix";
 }
 let updateBusy = false;
-async function updateDownload() {
+async function updateDownload(force = false) {
   if (updateBusy || dlState.busy) return { ok: false, err: "已有下载在进行" };
   const rel = await fetchLatestRelease();
   if (!rel) return { ok: false, err: "无法获取最新 Release (GitHub/Gitee 均不可达)" };
@@ -505,7 +507,7 @@ async function updateDownload() {
   const tag = (rel.tag_name || "").replace(/^v/, "");
   const asset = assetFor(rel, ARCH, "iframe") || assetFor(rel, ARCH, "");
   if (!asset || !asset.url) return { ok: false, err: "Release 未含 " + ARCH + " 架构 fpk 附件 (0.1.7 起 Gitee 超 100MB 上限停传, 需 GitHub 可达)" };
-  if (tag === cur && !rel.prerelease) return { ok: false, err: "当前已是最新版本 " + cur, same: true };
+  if (!force && tag === cur && !rel.prerelease) return { ok: false, err: "当前已是最新版本 " + cur, same: true };
   updateBusy = true; dlState.busy = true; dlState.err = null; dlState.file = asset.name; dlState.received = 0; dlState.total = 0; dlState.speed = 0;
   let dest = null;
   try {
@@ -528,10 +530,22 @@ function updateApply() {
   // sudo -n: 未授权时立即失败 (不挂起), 返回一次性授权命令
   const files = updateFiles();
   if (!files.length) return { ok: false, err: "update 目录没有已下载的 fpk" };
-  if (!sudoAuthorized()) return { ok: false, err: "sudo 白名单未覆盖当前下载目录 (授权命令见下方, 路径跟随所选目录)" };
+  if (!sudoAuthorized("install-fpk")) return { ok: false, err: "sudo 白名单未覆盖当前下载目录 (授权命令见下方, 路径跟随所选目录)" };
   const file = path.join(selectedUpdateDir(), files.map(f => f.name).sort().pop());
   const log = fs.openSync(path.join(DATA_DIR, "dashboard.log"), "a");
   const child = spawn("sudo", ["-n", "/usr/local/bin/appcenter-cli", "install-fpk", file], { detached: true, stdio: ["ignore", log, log] });
+  child.on("error", () => {});
+  child.unref();
+  return { ok: true, dispatched: true, file };
+}
+function updateHotApply() {
+  // 原地解包覆盖热更新: 绕过 fnOS 版本号必须递增的限制, 适合同版本修复与重装
+  const files = updateFiles();
+  if (!files.length) return { ok: false, err: "update 目录没有已下载的 fpk" };
+  if (!sudoAuthorized("hot-apply") && !sudoAuthorized(CMD_MAIN)) return { ok: false, err: "sudo 白名单未覆盖 hot-apply 命令 (请在终端执行下方授权命令)" };
+  const file = path.join(selectedUpdateDir(), files.map(f => f.name).sort().pop());
+  const log = fs.openSync(path.join(DATA_DIR, "dashboard.log"), "a");
+  const child = spawn("sudo", ["-n", CMD_MAIN, "hot-apply", file], { detached: true, stdio: ["ignore", log, log] });
   child.on("error", () => {});
   child.unref();
   return { ok: true, dispatched: true, file };
@@ -776,8 +790,8 @@ a{color:inherit;text-decoration:none}
 <script>
 const $=id=>document.getElementById(id);
 const I18N={
-zh:{title:"DeepSeek Harness 管理面板",panelSub:"管理面板",navDash:"总览",wsLabel:"工作区",dlStop:"停止",dlStopped:"已停止下载",copyLink:"复制直链",customGrepPh:"实时过滤日志…",scrollToBottom:"滚到底部",restarting:"重启中…",navPlugins:"插件",navLogs:"日志",restart:"重启 dsh",refreshAll:"刷新全部",refresh:"刷新",loading:"加载中…",running:"运行中",notRunning:"未运行",health:"健康",uptime:"运行",statDsh:"dsh web",statFpk:"fpk 版本",statDisk:"数据区",statModel:"语音模型",statProxy:"网关代理",versionCard:"版本 / 更新",proxyCard:"出站代理 (GitHub / Gitee)",proxyCardHint:"与 dsh 主进程共用 proxy.conf; 面板立即生效, dsh 重启后生效",proxyPh:"http://IP:端口 (留空保存 = 恢复直连)",proxySave:"保存代理",proxySaved:"已保存; dsh 主进程重启后同样生效",proxyBad:"格式无效, 需 http:// 开头",proxyCurrent:"当前代理",proxyNone:"未配置 (直连)",dirDefault:"默认 (dsh_home/update)",dirRefresh:"刷新目录列表",dirApiNA:"自定义目录需 fnOS ≥ 1.34.0: 在 应用设置 → 授权目录 添加后点刷新 (官方开放 API)",dirSaved:"下载目录已保存",fpkVer:"fpk 版本",dshInstalled:"已装 dsh 版本",upstreamVer:"上游官方版本",projectRel:"本项目最新 Release",isLatest:"已是最新",hasNew:"发现新版",detectFail:"探测失败",hotDownload:"一键下载到 NAS",hotHint:"GitHub 直链 · 约 121MB",downloading:"下载中…",dlDone:"下载完成",dlFail:"下载失败",dlEta:"剩余",dlSpeed:"速度",updateFilesTitle:"已下载的更新",noUpdateFiles:"update 目录为空",installUpdate:"安装更新 (appcenter-cli)",sudoNeed:"安装前需一次配置 sudo 白名单 (永久生效, 仅允许安装所选目录内的 fpk):",sudoAuthorized:"已授权",sudoNotAuthorized:"未授权",copy:"复制",copied:"已复制",delUpdQ:"删除已下载的 {name} ?",updateWays:"更新方式: ① 面板一键下载 → 安装更新 ② 下载 GitHub Release fpk → 应用中心手动安装 (数据区保留)",pluginsHint:"安装 @deepseek-ai/* 自动钉到已装 dsh 版本 · bundles 开关重启 dsh 生效 · 官方实验性插件也可在 dsh 内置插件页管理 (组件级开关)",thirdParty:"第三方插件",officialExp:"官方实验性插件",officialHintLine:"也可在 dsh 内置插件页管理 (组件级开关)",badgeThird:"第三方",badgeOfficial:"官方实验",badgeBundleOnly:"仅 bundles",enabled:"启用中",disabled:"已禁用",enableQ:"启用",disableQ:"禁用",noPlugins:"未安装第三方 / 官方实验性插件",coreBundles:"核心 bundles: ",versionMismatch:"与 dsh 版本不一致",mismatchTip:"版本不一致: 可在本面板重装该插件 (自动钉到当前 dsh 版本), 或在 dsh 插件页升级",installPlugin:"安装",newpkgPh:"@scope/plugin-name 或 包名",installing:"安装中… 最长 5 分钟",pinConfirmTitle:"安装官方插件",pinConfirmMsg:"将安装 {name}@{ver} (自动钉到已装 dsh 版本)。确认继续?",pluginCount:"插件",consistencyWarn:"版本不一致",restartConfirmTitle:"确认重启服务",restartConfirmMsg:"确定要重启 dsh 吗? 管理面板会短暂离线, 约 15~30 秒后自动恢复连接。",restartSent:"重启指令已发送…",restartDone:"重启完成",restartTimeout:"重启超时, 请刷新页面检查",fence403:"被信任围栏拒绝 (403)",reqFail:"请求失败: ",opFail:"操作失败",enableConfirmTitle:"启用插件确认",disableConfirmTitle:"禁用插件确认",enableConfirmMsg:"确定要启用插件 {name} 吗? 修改配置后需重启 dsh 才能生效。",disableConfirmMsg:"确定要禁用插件 {name} 吗? 禁用后此插件将被移出活动 bundles, 需重启 dsh 生效。",removeConfirmTitle:"删除插件确认",removeConfirmMsg:"确定要彻底删除插件 {name} 吗? 将从 profiles/web/package.json 彻底移除并清理依赖。此操作无法撤销!",deleteConfirmTitle:"删除文件确认",enableDone:"已启用, 重启 dsh 生效",disableDone:"已禁用, 重启 dsh 生效",removeDone:"已删除",removeDonePnpm:"已删除 (pnpm remove 完成)",removeDoneNo:"已删除 (pnpm 不可用, 仅移出 bundles)",removeFail:"删除失败",addDone:"已安装并启用, 重启 dsh 生效",addFail:"安装失败",applyConfirmTitle:"确认热更新安装",applyConfirmMsg:"确定使用 appcenter-cli 覆盖安装此版本吗? 安装期间系统会自动重启 dsh 服务, 管理面板将短暂离线约 1 分钟。",applySent:"安装指令已下发, App Center 安装中… 约 1 分钟后刷新页面",applyFail:"安装失败: 可能未授权 sudo",applyNeedAuth:"尚未授权 sudo, 请先执行下方授权命令",logApp:"app.log (生命周期)",logDsh:"dsh.log (dsh 输出)",logPanel:"dashboard.log (本面板)",autoRefresh:"自动刷新(5s)",emptyLog:"(空)",upgradedTitle:"🎉 fpk 已升级: {old} → {new}",viewNotes:"查看更新说明",confirm:"确定",cancel:"取消",dataDirLabel:"数据区"},
-en:{title:"DeepSeek Harness Console",panelSub:"Console",navDash:"Overview",wsLabel:"Workspace",dlStop:"Stop",dlStopped:"Download stopped",copyLink:"Copy link",customGrepPh:"Filter logs in real-time…",scrollToBottom:"Scroll to bottom",restarting:"Restarting…",navPlugins:"Plugins",navLogs:"Logs",restart:"Restart dsh",refreshAll:"Refresh all",refresh:"Refresh",loading:"Loading…",running:"Running",notRunning:"Stopped",health:"Health",uptime:"Uptime",statDsh:"dsh web",statFpk:"fpk version",statDisk:"Data dir",statModel:"Voice model",statProxy:"Gateway proxy",versionCard:"Version / Update",proxyCard:"Outbound proxy (GitHub / Gitee)",proxyCardHint:"Shared proxy.conf with dsh main process; effective for panel immediately, for dsh after restart",proxyPh:"http://IP:port (save empty = direct)",proxySave:"Save proxy",proxySaved:"Saved; also applies to dsh main process after restart",proxyBad:"Invalid format, must start with http://",proxyCurrent:"Current proxy",proxyNone:"Not configured (direct)",dirDefault:"Default (dsh_home/update)",dirRefresh:"Refresh dir list",dirApiNA:"Custom dir needs fnOS ≥ 1.34.0: add it in App Settings → Authorized dirs, then refresh (official open API)",dirSaved:"Download dir saved",fpkVer:"fpk version",dshInstalled:"Installed dsh",upstreamVer:"Upstream official",projectRel:"Latest project Release",isLatest:"Up to date",hasNew:"New version",detectFail:"Not detected",hotDownload:"Download to NAS",hotHint:"GitHub direct · ~121MB",downloading:"Downloading…",dlDone:"Download complete",dlFail:"Download failed",dlEta:"ETA",dlSpeed:"Speed",updateFilesTitle:"Downloaded updates",noUpdateFiles:"update dir is empty",installUpdate:"Install update (appcenter-cli)",sudoNeed:"One-time sudo whitelist required before installing (persistent, allows installing fpk from the selected dir only):",sudoAuthorized:"Authorized",sudoNotAuthorized:"Not authorized",copy:"Copy",copied:"Copied",delUpdQ:"Delete downloaded {name} ?",updateWays:"Update paths: ① panel download → install update ② download GitHub Release fpk → App Center manual install (data preserved)",pluginsHint:"Installing @deepseek-ai/* pins to installed dsh version · bundle toggles take effect after dsh restart · official experimental plugins can also be managed in dsh built-in plugin page",thirdParty:"Third-party plugins",officialExp:"Official experimental",officialHintLine:"Also manageable in the dsh built-in plugin page (component toggles)",badgeThird:"3rd-party",badgeOfficial:"Official exp.",badgeBundleOnly:"bundles only",enabled:"Enabled",disabled:"Disabled",enableQ:"Enable",disableQ:"Disable",noPlugins:"No third-party or official experimental plugins installed",coreBundles:"Core bundles: ",versionMismatch:"Version mismatch",mismatchTip:"Version mismatch: reinstall this plugin here (pins to current dsh version) or upgrade it in the dsh plugin page",installPlugin:"Install",newpkgPh:"@scope/plugin-name or name",installing:"Installing… up to 5 min",pinConfirmTitle:"Install official plugin",pinConfirmMsg:"Will install {name}@{ver} (pinned to installed dsh version). Continue?",pluginCount:"Plugins",consistencyWarn:"Mismatch",restartConfirmTitle:"Restart Service",restartConfirmMsg:"Restart dsh? The panel will go offline briefly and auto-recover in 15-30s.",restartSent:"Restart command sent…",restartDone:"Restart complete",restartTimeout:"Restart timed out, please refresh",fence403:"Blocked by trust fence (403)",reqFail:"Request failed: ",opFail:"Operation failed",enableConfirmTitle:"Enable Plugin",disableConfirmTitle:"Disable Plugin",enableConfirmMsg:"Enable plugin {name}? Takes effect after restarting dsh.",disableConfirmMsg:"Disable plugin {name}? Removed from active bundles, takes effect after restarting dsh.",removeConfirmTitle:"Remove Plugin",removeConfirmMsg:"Permanently delete {name}? Removed from profiles/web/package.json with dependencies cleaned. Cannot be undone!",deleteConfirmTitle:"Delete File",enableDone:"Enabled, takes effect after dsh restart",disableDone:"Disabled, takes effect after dsh restart",removeDone:"Deleted",removeDonePnpm:"Deleted (pnpm remove done)",removeDoneNo:"Deleted (pnpm unavailable, bundles only)",removeFail:"Delete failed",addDone:"Installed & enabled, takes effect after dsh restart",addFail:"Install failed",applyConfirmTitle:"Confirm Hot Update",applyConfirmMsg:"Install this fpk update via appcenter-cli? dsh will restart automatically and the panel will be offline for about 1 minute.",applySent:"Install dispatched, App Center installing… refresh in ~1 min",applyFail:"Install failed: sudo not granted?",applyNeedAuth:"sudo not granted yet, run the grant command below first",logApp:"app.log (lifecycle)",logDsh:"dsh.log (dsh output)",logPanel:"dashboard.log (panel)",autoRefresh:"Auto (5s)",emptyLog:"(empty)",upgradedTitle:"🎉 fpk upgraded: {old} → {new}",viewNotes:"Release notes",confirm:"Confirm",cancel:"Cancel",dataDirLabel:"data dir"}
+zh:{title:"DeepSeek Harness 管理面板",panelSub:"管理面板",navDash:"总览",wsLabel:"工作区",dlStop:"停止",dlStopped:"已停止下载",copyLink:"复制直链",customGrepPh:"实时过滤日志…",scrollToBottom:"滚到底部",restarting:"重启中…",navPlugins:"插件",navLogs:"日志",restart:"重启 dsh",refreshAll:"刷新全部",refresh:"刷新",loading:"加载中…",running:"运行中",notRunning:"未运行",health:"健康",uptime:"运行",statDsh:"dsh web",statFpk:"fpk 版本",statDisk:"数据区",statModel:"语音模型",statProxy:"网关代理",versionCard:"版本 / 更新",proxyCard:"出站代理 (GitHub / Gitee)",proxyCardHint:"与 dsh 主进程共用 proxy.conf; 面板立即生效, dsh 重启后生效",proxyPh:"http://IP:端口 (留空保存 = 恢复直连)",proxySave:"保存代理",proxySaved:"已保存; dsh 主进程重启后同样生效",proxyBad:"格式无效, 需 http:// 开头",proxyCurrent:"当前代理",proxyNone:"未配置 (直连)",dirDefault:"默认 (dsh_home/update)",dirRefresh:"刷新目录列表",dirApiNA:"自定义目录需 fnOS ≥ 1.34.0: 在 应用设置 → 授权目录 添加后点刷新 (官方开放 API)",dirSaved:"下载目录已保存",fpkVer:"fpk 版本",dshInstalled:"已装 dsh 版本",upstreamVer:"上游官方版本",projectRel:"本项目最新 Release",isLatest:"已是最新",hasNew:"发现新版",detectFail:"探测失败",hotDownload:"一键下载到 NAS",forceDownload:"强制重新下载本版",hotHint:"GitHub 直链 · 约 165MB",downloading:"下载中…",dlDone:"下载完成",dlFail:"下载失败",dlEta:"剩余",dlSpeed:"速度",updateFilesTitle:"已下载的更新",noUpdateFiles:"update 目录为空",installUpdate:"标准安装 (appcenter-cli)",hotApplyUpdate:"强制覆盖热安装 (解包替换)",sudoNeed:"安装前需一次配置 sudo 白名单 (永久生效, 允许安装所选目录内的 fpk):",sudoAuthorized:"已授权",sudoNotAuthorized:"未授权",copy:"复制",copied:"已复制",delUpdQ:"删除已下载的 {name} ?",updateWays:"更新方式: ① 面板一键下载 → 安装更新 (标准安装或同版本强制覆盖) ② 下载 GitHub Release fpk → 应用中心手动安装",pluginsHint:"安装 @deepseek-ai/* 自动钉到已装 dsh 版本 · bundles 开关重启 dsh 生效 · 官方实验性插件也可在 dsh 内置插件页管理 (组件级开关)",thirdParty:"第三方插件",officialExp:"官方实验性插件",officialHintLine:"也可在 dsh 内置插件页管理 (组件级开关)",badgeThird:"第三方",badgeOfficial:"官方实验",badgeBundleOnly:"仅 bundles",enabled:"启用中",disabled:"已禁用",enableQ:"启用",disableQ:"禁用",noPlugins:"未安装第三方 / 官方实验性插件",coreBundles:"核心 bundles: ",versionMismatch:"与 dsh 版本不一致",mismatchTip:"版本不一致: 可在本面板重装该插件 (自动钉到当前 dsh 版本), 或在 dsh 插件页升级",installPlugin:"安装",newpkgPh:"@scope/plugin-name 或 包名",installing:"安装中… 最长 5 分钟",pinConfirmTitle:"安装官方插件",pinConfirmMsg:"将安装 {name}@{ver} (自动钉到已装 dsh 版本)。确认继续?",pluginCount:"插件",consistencyWarn:"版本不一致",restartConfirmTitle:"确认重启服务",restartConfirmMsg:"确定要重启 dsh 吗? 管理面板会短暂离线, 约 15~30 秒后自动恢复连接。",restartSent:"重启指令已发送…",restartDone:"重启完成",restartTimeout:"重启超时, 请刷新页面检查",fence403:"被信任围栏拒绝 (403)",reqFail:"请求失败: ",opFail:"操作失败",enableConfirmTitle:"启用插件确认",disableConfirmTitle:"禁用插件确认",enableConfirmMsg:"确定要启用插件 {name} 吗? 修改配置后需重启 dsh 才能生效。",disableConfirmMsg:"确定要禁用插件 {name} 吗? 禁用后此插件将被移出活动 bundles, 需重启 dsh 生效。",removeConfirmTitle:"删除插件确认",removeConfirmMsg:"确定要彻底删除插件 {name} 吗? 将从 profiles/web/package.json 彻底移除并清理依赖。此操作无法撤销!",deleteConfirmTitle:"删除文件确认",enableDone:"已启用, 重启 dsh 生效",disableDone:"已禁用, 重启 dsh 生效",removeDone:"已删除",removeDonePnpm:"已删除 (pnpm remove 完成)",removeDoneNo:"已删除 (pnpm 不可用, 仅移出 bundles)",removeFail:"删除失败",addDone:"已安装并启用, 重启 dsh 生效",addFail:"安装失败",applyConfirmTitle:"确认标准安装",applyConfirmMsg:"确定使用 appcenter-cli 覆盖安装此版本吗? 安装期间系统会自动重启 dsh 服务, 管理面板将短暂离线约 1 分钟。",hotApplyConfirmTitle:"确认强制覆盖热安装",hotApplyConfirmMsg:"将直接解包 fpk 内置的产物原地覆盖当前应用 (无需经过系统版本递增校验, 适合同版本补丁修复或重装), 覆盖后会自动重启服务。确认继续?",applySent:"安装指令已下发, App Center 安装中… 约 1 分钟后刷新页面",hotApplySent:"热安装指令已下发, 正在原地覆盖并重启服务… 约 20 秒后刷新页面",applyFail:"安装失败: 可能未授权 sudo",applyNeedAuth:"尚未授权 sudo, 请先执行下方授权命令",logApp:"app.log (生命周期)",logDsh:"dsh.log (dsh 输出)",logPanel:"dashboard.log (本面板)",autoRefresh:"自动刷新(5s)",emptyLog:"(空)",upgradedTitle:"🎉 fpk 已升级: {old} → {new}",viewNotes:"查看更新说明",confirm:"确定",cancel:"取消",dataDirLabel:"数据区"},
+en:{title:"DeepSeek Harness Console",panelSub:"Console",navDash:"Overview",wsLabel:"Workspace",dlStop:"Stop",dlStopped:"Download stopped",copyLink:"Copy link",customGrepPh:"Filter logs in real-time…",scrollToBottom:"Scroll to bottom",restarting:"Restarting…",navPlugins:"Plugins",navLogs:"Logs",restart:"Restart dsh",refreshAll:"Refresh all",refresh:"Refresh",loading:"Loading…",running:"Running",notRunning:"Stopped",health:"Health",uptime:"Uptime",statDsh:"dsh web",statFpk:"fpk version",statDisk:"Data dir",statModel:"Voice model",statProxy:"Gateway proxy",versionCard:"Version / Update",proxyCard:"Outbound proxy (GitHub / Gitee)",proxyCardHint:"Shared proxy.conf with dsh main process; effective for panel immediately, for dsh after restart",proxyPh:"http://IP:port (save empty = direct)",proxySave:"Save proxy",proxySaved:"Saved; also applies to dsh main process after restart",proxyBad:"Invalid format, must start with http://",proxyCurrent:"Current proxy",proxyNone:"Not configured (direct)",dirDefault:"Default (dsh_home/update)",dirRefresh:"Refresh dir list",dirApiNA:"Custom dir needs fnOS ≥ 1.34.0: add it in App Settings → Authorized dirs, then refresh (official open API)",dirSaved:"Download dir saved",fpkVer:"fpk version",dshInstalled:"Installed dsh",upstreamVer:"Upstream official",projectRel:"Latest project Release",isLatest:"Up to date",hasNew:"New version",detectFail:"Not detected",hotDownload:"Download to NAS",forceDownload:"Force Re-download",hotHint:"GitHub direct · ~165MB",downloading:"Downloading…",dlDone:"Download complete",dlFail:"Download failed",dlEta:"ETA",dlSpeed:"Speed",updateFilesTitle:"Downloaded updates",noUpdateFiles:"update dir is empty",installUpdate:"Standard Install (appcenter-cli)",hotApplyUpdate:"Force Overlay Hot Install",sudoNeed:"One-time sudo whitelist required before installing (persistent, allows installing fpk from the selected dir only):",sudoAuthorized:"Authorized",sudoNotAuthorized:"Not authorized",copy:"Copy",copied:"Copied",delUpdQ:"Delete downloaded {name} ?",updateWays:"Update paths: ① panel download → install update (standard or force overlay) ② download GitHub Release fpk → App Center manual install",pluginsHint:"Installing @deepseek-ai/* pins to installed dsh version · bundle toggles take effect after dsh restart · official experimental plugins can also be managed in dsh built-in plugin page",thirdParty:"Third-party plugins",officialExp:"Official experimental",officialHintLine:"Also manageable in the dsh built-in plugin page (component toggles)",badgeThird:"3rd-party",badgeOfficial:"Official exp.",badgeBundleOnly:"bundles only",enabled:"Enabled",disabled:"Disabled",enableQ:"Enable",disableQ:"Disable",noPlugins:"No third-party or official experimental plugins installed",coreBundles:"Core bundles: ",versionMismatch:"Version mismatch",mismatchTip:"Version mismatch: reinstall this plugin here (pins to current dsh version) or upgrade it in the dsh plugin page",installPlugin:"Install",newpkgPh:"@scope/plugin-name or name",installing:"Installing… up to 5 min",pinConfirmTitle:"Install official plugin",pinConfirmMsg:"Will install {name}@{ver} (pinned to installed dsh version). Continue?",pluginCount:"Plugins",consistencyWarn:"Mismatch",restartConfirmTitle:"Restart Service",restartConfirmMsg:"Restart dsh? The panel will go offline briefly and auto-recover in 15-30s.",restartSent:"Restart command sent…",restartDone:"Restart complete",restartTimeout:"Restart timed out, please refresh",fence403:"Blocked by trust fence (403)",reqFail:"Request failed: ",opFail:"Operation failed",enableConfirmTitle:"Enable Plugin",disableConfirmTitle:"Disable Plugin",enableConfirmMsg:"Enable plugin {name}? Takes effect after restarting dsh.",disableConfirmMsg:"Disable plugin {name}? Removed from active bundles, takes effect after restarting dsh.",removeConfirmTitle:"Remove Plugin",removeConfirmMsg:"Permanently delete {name}? Removed from profiles/web/package.json with dependencies cleaned. Cannot be undone!",deleteConfirmTitle:"Delete File",enableDone:"Enabled, takes effect after dsh restart",disableDone:"Disabled, takes effect after dsh restart",removeDone:"Deleted",removeDonePnpm:"Deleted (pnpm remove done)",removeDoneNo:"Deleted (pnpm unavailable, bundles only)",removeFail:"Delete failed",addDone:"Installed & enabled, takes effect after dsh restart",addFail:"Install failed",applyConfirmTitle:"Confirm Standard Update",applyConfirmMsg:"Install this fpk update via appcenter-cli? dsh will restart automatically and the panel will be offline for about 1 minute.",hotApplyConfirmTitle:"Confirm Force Overlay Update",hotApplyConfirmMsg:"Directly unpack and overlay the application artifacts from fpk (bypasses fnOS version increment check, ideal for same-version hotfixes). The service will restart automatically. Continue?",applySent:"Install dispatched, App Center installing… refresh in ~1 min",hotApplySent:"Hot overlay dispatched, restarting service… refresh in ~20s",applyFail:"Install failed: sudo not granted?",applyNeedAuth:"sudo not granted yet, run the grant command below first",logApp:"app.log (lifecycle)",logDsh:"dsh.log (dsh output)",logPanel:"dashboard.log (panel)",autoRefresh:"Auto (5s)",emptyLog:"(empty)",upgradedTitle:"🎉 fpk upgraded: {old} → {new}",viewNotes:"Release notes",confirm:"Confirm",cancel:"Cancel",dataDirLabel:"data dir"}
 };
 let LANG=localStorage.getItem("dsh-lang")||((navigator.language||"").toLowerCase().indexOf("zh")===0?"zh":"en");
 function t(k){const d=I18N[LANG]||I18N.zh;return d[k]!==undefined?d[k]:(I18N.zh[k]!==undefined?I18N.zh[k]:k)}
@@ -874,7 +888,11 @@ if(d.upstreamDsh){
 } else up='<span class="dim">'+t("detectFail")+"</span>";
 let pr=d.projectRelease?('<a href="'+d.projectRelease.url+'" target="_blank" rel="noopener" style="text-decoration:underline">'+esc(d.projectRelease.tag)+"</a>"):'<span class="dim">'+t("detectFail")+"</span>";
 let html=kv(t("fpkVer"),esc(d.fpk))+kv(t("upstreamVer"),up)+kv(t("projectRel"),pr);
-html+='<div class="row" style="margin-top:10px"><button class="btn primary" id="dlBtn" onclick="hotUpdate(this)">'+svg(ICONS.download)+"<span>"+t("hotDownload")+'</span></button><button class="btn" id="linkBtn" onclick="copyLink(this)">'+svg(ICONS.copy)+"<span>"+t("copyLink")+"</span></button>"+'<span class="hint">'+t("hotHint")+"</span></div>";
+html+='<div class="row" style="margin-top:10px">'+
+  '<button class="btn primary" id="dlBtn" onclick="hotUpdate(this,false)">'+svg(ICONS.download)+"<span>"+t("hotDownload")+'</span></button>'+
+  '<button class="btn" id="forceDlBtn" onclick="hotUpdate(this,true)" title="'+t("forceDownload")+'">'+svg(ICONS.refresh)+"<span>"+t("forceDownload")+'</span></button>'+
+  '<button class="btn" id="linkBtn" onclick="copyLink(this)">'+svg(ICONS.copy)+"<span>"+t("copyLink")+"</span></button>"+
+  '<span class="hint">'+t("hotHint")+"</span></div>";
 html+='<div id="dlArea"></div>';
 // 已下载的更新 + 授权状态 + 下载目录选择
 const st=await api("/api/update/state");
@@ -891,7 +909,10 @@ if(st){
   if(!files.length) html+='<div class="dim" style="margin-top:6px">'+t("noUpdateFiles")+"</div>";
   else{
     for(const f of files) html+='<div class="row"><span class="mono val" style="flex:1">'+esc(f.name)+'</span><span class="dim num">'+humanSize(f.size)+" · "+new Date(f.mtime).toLocaleString()+'</span><button class="icon-btn del" onclick="delUpdate(this)" data-name="'+esc(f.name)+'" title="delete">'+svg(ICONS.x)+"</button></div>";
-    html+='<div class="row"><button class="btn primary" onclick="applyUpdate()">'+t("installUpdate")+"</button></div>";
+    html+='<div class="row" style="gap:8px">'+
+      '<button class="btn primary" onclick="applyUpdate()">'+t("installUpdate")+'</button>'+
+      '<button class="btn" onclick="applyHotUpdate()" style="border-color:var(--accent);color:var(--accent)" title="无需系统递增版本号">'+svg(ICONS.refresh)+"<span>"+t("hotApplyUpdate")+'</span></button>'+
+    '</div>';
   }
   if(!st.authorized){
     html+='<div class="dim" style="margin-top:8px">'+t("sudoNeed")+"</div>";
@@ -948,15 +969,15 @@ function startDlPoll(){if(dlPoll)return;dlPoll=setInterval(async()=>{
   if(s.downloading)renderProgress(s);
   else{clearInterval(dlPoll);dlPoll=null;loadVersion()}
 },1000)}
-async function hotUpdate(btn){
+async function hotUpdate(btn,force=false){
   btn.disabled=true;btn.classList.add("busy");btn.innerHTML=svg(ICONS.refresh)+"<span>"+t("downloading")+"</span>";
   $("dlArea").innerHTML='<div style="margin-top:8px"><div class="bar"><div class="bar-ind"></div></div><div class="dim" style="margin-top:4px">'+t("downloading")+"</div></div>";
   startDlPoll();
-  const d=await api("/api/update/download",{method:"POST"});
+  const d=await api("/api/update/download",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({force})});
   clearInterval(dlPoll);dlPoll=null;
   if(d&&d.ok){toast(t("dlDone"));loadVersion();loadStatus()}
-  else if(d&&d.stopped){$("dlArea").innerHTML='<div class="row dim">'+t("dlStopped")+"</div>";btn.disabled=false;btn.classList.remove("busy");btn.innerHTML=svg(ICONS.download)+"<span>"+t("hotDownload")+"</span>"}
-  else{$("dlArea").innerHTML='<div class="row" style="color:var(--err)">'+t("dlFail")+": "+esc((d&&d.err)||t("opFail"))+"</div>";btn.disabled=false;btn.classList.remove("busy");btn.innerHTML=svg(ICONS.download)+"<span>"+t("hotDownload")+"</span>"}
+  else if(d&&d.stopped){$("dlArea").innerHTML='<div class="row dim">'+t("dlStopped")+"</div>";btn.disabled=false;btn.classList.remove("busy");btn.innerHTML=svg(ICONS.download)+"<span>"+(force?t("forceDownload"):t("hotDownload"))+"</span>"}
+  else{$("dlArea").innerHTML='<div class="row" style="color:var(--err)">'+t("dlFail")+": "+esc((d&&d.err)||t("opFail"))+"</div>";btn.disabled=false;btn.classList.remove("busy");btn.innerHTML=svg(ICONS.download)+"<span>"+(force?t("forceDownload"):t("hotDownload"))+"</span>"}
 }
 async function delUpdate(btn){
   const name=btn.dataset.name;
@@ -972,6 +993,15 @@ async function applyUpdate(){
   if(!ok)return;
   const d=await api("/api/update/apply",{method:"POST"});
   if(d&&d.ok){toast(t("applySent"));setTimeout(()=>location.reload(),60000)}
+  else toast(t("applyFail"),1);
+}
+async function applyHotUpdate(){
+  const st=await api("/api/update/state");
+  if(st&&!st.authorized){toast(t("applyNeedAuth"),1);return}
+  const ok=await modalConfirm({title:t("hotApplyConfirmTitle"),text:t("hotApplyConfirmMsg"),okText:t("hotApplyUpdate"),warn:true});
+  if(!ok)return;
+  const d=await api("/api/update/hot-apply",{method:"POST"});
+  if(d&&d.ok){toast(t("hotApplySent"));setTimeout(()=>location.reload(),20000)}
   else toast(t("applyFail"),1);
 }
 async function loadProxy(){const d=await api("/api/status");if(!d)return;
@@ -1158,8 +1188,12 @@ const server = http.createServer(async (req, res) => {
       return send(200, JSON.stringify({ ok: true, text }));
     }
     if (u.pathname === "/api/dsh/restart" && req.method === "POST") { restartDsh(); return send(200, JSON.stringify({ ok: true, msg: "restart dispatched" })); }
-    if (u.pathname === "/api/update/download" && req.method === "POST") return send(200, JSON.stringify(await updateDownload()));
+    if (u.pathname === "/api/update/download" && req.method === "POST") {
+      const { force } = await readBody(req);
+      return send(200, JSON.stringify(await updateDownload(!!force)));
+    }
     if (u.pathname === "/api/update/apply" && req.method === "POST") return send(200, JSON.stringify(updateApply()));
+    if (u.pathname === "/api/update/hot-apply" && req.method === "POST") return send(200, JSON.stringify(updateHotApply()));
     if (u.pathname === "/api/update/stop" && req.method === "POST") {
       // 停止下载: destroy 当前请求 → downloadToFile reject → updateDownload 清理 .part
       if (!dlState.busy || !dlState.req) return send(200, JSON.stringify({ ok: false, err: "无进行中的下载" }));
