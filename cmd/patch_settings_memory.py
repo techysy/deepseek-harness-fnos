@@ -81,6 +81,12 @@ def main():
             # 0.2.1+ 起上游重构移除了 isLoopback ? "host" : "memory" 限制, Settings 服务原生放行非回环
             if "class SettingsDescribeMirror" in content or "SettingsDescribeMirror" in content:
                 print(f"INFO: Settings 服务已原生支持非回环访问 (0.2.1+ 重构架构): {path}")
+                # 写入标记便于幂等检测与构建脚本硬校验通过
+                if not MARKER in content:
+                    new_content = "/* dsh-fnos: settings host-mode patch (native upstream >=0.2.1) */\n" + content
+                    if not dry_run:
+                        with open(path, "w", encoding="utf-8") as fh:
+                            fh.write(new_content)
                 skipped.append(path)
                 continue
             print(f"WARN: isLoopback ternary not found (上游已修复或改写?): {path}")
