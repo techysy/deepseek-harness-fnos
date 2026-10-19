@@ -560,6 +560,60 @@ else if (s.includes(old)) {
     else
         log "attachment-durability patch: SKIP (dsh-attachment-local/lib/index.js 未找到)"
     fi
+    # 放宽 dsh-host-webserver 的 0.0.0.0 (wildcard) 绑定限制 (0.2.1+):
+    # 上游 0.2.1-rc.2 在 dsh-host-webserver/lib/index.js 引入了 isWildcardAddress 校验，
+    # 强制拒绝 host 为 "0.0.0.0" 的绑定配置，抛出:
+    # "webserver: host 0.0.0.0 is an unspecified (wildcard) address... bind one concrete IPv4..."
+    # 导致 cordis.patch.yml 覆盖 0.0.0.0 无法启动 (局域网直连依赖该绑定)。
+    # 幂等补丁放宽该限制，允许在 fnOS 局域网环境下监听 0.0.0.0。
+    WS_LIB=""
+    for cand in \
+        "$(dirname "$(dirname "${DSH_JS}")")/dsh-host-webserver/lib/index.js" \
+        "${APP_DIR}/target/server/node_modules/@deepseek-ai/dsh-host-webserver/lib/index.js" \
+        "${APP_DIR}/server/node_modules/@deepseek-ai/dsh-host-webserver/lib/index.js" \
+        "${APP_VOL}/@appcenter/deepseek-harness/server/node_modules/@deepseek-ai/dsh-host-webserver/lib/index.js" \
+        "${APP_VOL}/@appcenter/dsh/server/node_modules/@deepseek-ai/dsh-host-webserver/lib/index.js" \
+        "/vol4/@appcenter/deepseek-harness/server/node_modules/@deepseek-ai/dsh-host-webserver/lib/index.js" \
+        "/vol4/@appcenter/dsh/server/node_modules/@deepseek-ai/dsh-host-webserver/lib/index.js"; do
+        [ -f "$cand" ] && WS_LIB="$cand" && break
+    done
+    if [ -n "${WS_LIB}" ]; then
+        ws_patch_out=$(/usr/bin/python3 - "${WS_LIB}" <<'WSPY'
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+old = "if (isWildcardAddress(parsed)) throw new Error("
+new = "if (false && isWildcardAddress(parsed)) throw new Error( /* dsh-fnos: allow 0.0.0.0 bind */"
+if new in s:
+    print("host-webserver-wildcard patch: already patched")
+elif old in s:
+    s = s.replace(old, new)
+    open(p, "w", encoding="utf-8").write(s)
+    print("host-webserver-wildcard patch: patched")
+else:
+    print("host-webserver-wildcard patch: native or not found")
+WSPY
+2>&1)
+        if [ -z "$ws_patch_out" ] || echo "$ws_patch_out" | grep -qi "error\|traceback\|not found"; then
+            ws_patch_out=$("${NODE_BIN:-node}" -e '
+const fs = require("fs");
+const p = process.argv[1];
+let s = fs.readFileSync(p, "utf8");
+const old = "if (isWildcardAddress(parsed)) throw new Error(";
+const rep = "if (false && isWildcardAddress(parsed)) throw new Error( /* dsh-fnos: allow 0.0.0.0 bind */";
+if (s.includes(rep)) { process.stdout.write("host-webserver-wildcard patch: already patched (node)"); }
+else if (s.includes(old)) {
+  s = s.replace(old, rep);
+  fs.writeFileSync(p, s);
+  process.stdout.write("host-webserver-wildcard patch: patched (node)");
+} else {
+  process.stdout.write("host-webserver-wildcard patch: native or not found (node)");
+}
+' "${WS_LIB}" 2>&1)
+        fi
+        log "${ws_patch_out}"
+    fi
+
     # 启动 dsh web: 不带 --host (让 patch 的 0.0.0.0 生效), 显式传 --port + trusted-host
     # DSH_ARGS 非空时 = 用 node <bin.js> 运行 (无 bin 链接的兜底)
     # dsh 自托管 node: 把 nodejs_v24 bin 目录加入 PATH, 供 dsh 进程及 agent 调用 node/npm
