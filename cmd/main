@@ -786,7 +786,21 @@ hot_apply() {
     if [ -d "${target_dir}" ] && [ -f "${tmp_dir}/app.tgz" ]; then
         log "hot-apply: 覆盖解压 app.tgz 到 ${target_dir} ..."
         tar -zxf "${tmp_dir}/app.tgz" -C "${target_dir}"
-        chown -R dsh:dsh "${target_dir}" 2>/dev/null || true
+        # fpk 内文件属主是构建机 uid (如 1001), 必须在启动前统一归属为服务账号,
+        # 否则 dsh 账号无权读写 → 补丁 open() 报 EACCES, dsh 启动失败
+        if id dsh >/dev/null 2>&1; then
+            chown -R dsh:dsh "${target_dir}" 2>/dev/null || true
+        fi
+        # 归位后按权限位再校验一次: 任意文件对服务账号不可读即视为安装异常
+        if [ "$(id -u)" -eq 0 ] && id dsh >/dev/null 2>&1; then
+            local unreadable
+            unreadable=$(sudo -u dsh test -r "${target_dir}/server/node_modules/@deepseek-ai/dsh/lib/bin.js" 2>&1; echo $?)
+            if [ "${unreadable}" != "0" ]; then
+                log "hot-apply: WARN 覆盖后属主/权限异常 (dsh 无法读取 bin.js), 继续尝试启动"
+            fi
+        fi
+    else
+        log "hot-apply: WARN 未找到 app.tgz, 跳过产物覆盖"
     fi
 
     # 4. 同步更新 cmd/ 下的脚本与 manifest
@@ -802,17 +816,22 @@ hot_apply() {
     log "hot-apply: 产物覆盖完成，重新启动服务 ..."
 
     # 5. 启动服务 (以 dsh 用户身份拉起，避免 root 身份残留占用端口)
+    local ret=0
     if [ "$(id -u)" -eq 0 ] && id dsh >/dev/null 2>&1; then
         su -s /bin/bash dsh -c "${CMD_DIR}/main start"
+        ret=$?
     else
         start
+        ret=$?
     fi
-    local ret=$?
     if [ $ret -eq 0 ]; then
         log "hot-apply: 热安装完成，服务运行正常"
         echo "hot-apply: success"
     else
-        log "hot-apply: 服务重启失败"
+        # 失败时把 dsh 的启动错误摘要一并落 app.log, 面板「日志」页即可直接看到根因
+        local err_summary
+        err_summary=$(tail -n 40 "${DSH_LOG}" 2>/dev/null | grep -E 'Error|error|failed|Failed|EACCES|EADDRINUSE' | head -5 | tr '\n' ' ')
+        log "hot-apply: 服务重启失败 — ${err_summary:-无错误摘要, 请查看 dsh.log}"
         echo "hot-apply: failed" >&2
     fi
     return $ret

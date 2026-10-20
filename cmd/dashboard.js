@@ -820,6 +820,8 @@ document.querySelectorAll(".nav button").forEach(b=>b.addEventListener("click",(
   document.querySelectorAll(".nav button").forEach(x=>x.classList.remove("active"));b.classList.add("active");
   document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
   $("view-"+b.dataset.view).classList.add("active");
+  // 切到日志页立即拉最新日志 (隐藏状态下 scrollHeight 为 0, 必须在可见后渲染才能正确滚到底)
+  if(b.dataset.view==="logs")loadLogs();
 }));
 // 现代友好的异步模态确认弹窗 (CreditDaddy mask/modal 样式)
 let modalResolve=null;
@@ -1002,7 +1004,7 @@ async function applyHotUpdate(){
   if(!ok)return;
   const d=await api("/api/update/hot-apply",{method:"POST"});
   if(d&&d.ok){toast(t("hotApplySent"));setTimeout(()=>location.reload(),20000)}
-  else toast(t("applyFail"),1);
+  else toast((d&&d.err)?((d.err)+" · "+t("applyFail")):t("applyFail"),1);
 }
 async function loadProxy(){const d=await api("/api/status");if(!d)return;
 $("proxyInput").value=(d.proxy&&d.proxy.conf)||"";
@@ -1136,17 +1138,22 @@ if($("customGrep")){
 function scrollLogsBottom(){
   const lv=$("logview");if(lv)lv.scrollTop=lv.scrollHeight;
 }
+// 日志视图切换/文件切换时立即重新拉取 (修: 之前只切换 UI 不刷新, 且首屏渲染早于数据返回)
 async function loadLogs(){
   const f=$("logfile").value,n=$("lines").value;
+  const isAtBottom=(()=>{const lv=$("logview");return !lv||lv.scrollHeight-lv.scrollTop-lv.clientHeight<40})();
   const d=await api("/api/logs?file="+f+"&lines="+n+(curGrep?"&grep="+encodeURIComponent(curGrep):""));
-  if(d&&d.ok){
-    const lines=(d.text||"").split("\\n");
-    $("logview").innerHTML=lines.map(l=>{
-      const cls=/error|fail|exception|eaddrinuse|eacces/i.test(l)?"errl":(/warn/i.test(l)?"warnl":(/^[\\s]*$/.test(l)?"diml":""));
-      return cls?'<span class="'+cls+'">'+esc(l)+"</span>":esc(l);
-    }).join("\\n")||t("emptyLog");
-  }
+  if(!d||!d.ok)return;
+  const lines=(d.text||"").split("\\n");
+  $("logview").innerHTML=lines.map(l=>{
+    const cls=/error|fail|exception|eaddrinuse|eacces/i.test(l)?"errl":(/warn/i.test(l)?"warnl":(/^[\\s]*$/.test(l)?"diml":""));
+    return cls?'<span class="'+cls+'">'+esc(l)+"</span>":esc(l);
+  }).join("\\n")||t("emptyLog");
+  // 默认滚到底部展示最新日志; 用户上翻查看历史时不打断
+  if(isAtBottom)scrollLogsBottom();
 }
+$("logfile").addEventListener("change",()=>loadLogs());
+$("lines").addEventListener("change",()=>loadLogs());
 let timer=null;function autoLogs(){clearInterval(timer);if($("auto").checked)timer=setInterval(loadLogs,5000)}
 function loadAll(){loadStatus();loadVersion();loadProxy();loadPlugins();loadLogs()}
 applyTheme();applyStaticLang();loadAll();
