@@ -804,12 +804,25 @@ hot_apply() {
     fi
 
     # 4. 同步更新 cmd/ 下的脚本与 manifest
+    # ⚠️ 本脚本正在运行, 绝不能用 cp 原地覆盖 cmd/main: bash 按文件偏移逐行读取
+    # 脚本, 原地改写会让解释器读到错乱内容 (表现为执行中途莫名退出/语法错).
+    # 改为先落到同目录临时名, 再用 mv 原子替换目录项 —— 运行中的进程仍持有旧
+    # inode, 不受影响, 下次执行才用新文件.
     if [ -d "${tmp_dir}/cmd" ]; then
-        cp -a "${tmp_dir}/cmd"/* "${CMD_DIR}/" 2>/dev/null || true
-        chmod +x "${CMD_DIR}"/* 2>/dev/null || true
+        for f in "${tmp_dir}"/cmd/*; do
+            [ -f "$f" ] || continue
+            local base dest
+            base="$(basename "$f")"
+            dest="${CMD_DIR}/${base}"
+            cp -f "$f" "${dest}.newtmp" 2>/dev/null || { log "hot-apply: WARN 复制 ${base} 失败"; continue; }
+            chmod 755 "${dest}.newtmp" 2>/dev/null || true
+            mv -f "${dest}.newtmp" "${dest}" 2>/dev/null || { rm -f "${dest}.newtmp"; log "hot-apply: WARN 替换 ${base} 失败"; }
+        done
     fi
     if [ -f "${tmp_dir}/manifest" ]; then
-        cp -f "${tmp_dir}/manifest" "${APP_DIR}/manifest" 2>/dev/null || true
+        cp -f "${tmp_dir}/manifest" "${APP_DIR}/manifest.newtmp" 2>/dev/null \
+            && mv -f "${APP_DIR}/manifest.newtmp" "${APP_DIR}/manifest" 2>/dev/null \
+            || { rm -f "${APP_DIR}/manifest.newtmp"; log "hot-apply: WARN 替换 manifest 失败"; }
     fi
 
     rm -rf "${tmp_dir}"
@@ -817,11 +830,26 @@ hot_apply() {
 
     # 5. 启动服务 (以 dsh 用户身份拉起，避免 root 身份残留占用端口)
     local ret=0
-    if [ "$(id -u)" -eq 0 ] && id dsh >/dev/null 2>&1; then
-        su -s /bin/bash dsh -c "${CMD_DIR}/main start"
-        ret=$?
-    else
-        start
+    _hot_start() {
+        if [ "$(id -u)" -eq 0 ] && id dsh >/dev/null 2>&1; then
+            su -s /bin/bash dsh -c "${CMD_DIR}/main start"
+        else
+            start
+        fi
+    }
+    _hot_start
+    ret=$?
+    if [ $ret -ne 0 ]; then
+        # 重试一次: 覆盖后残留的属主/端口问题可在这一轮自愈, 避免服务停在停止态
+        # 需要用户手动去应用中心点启动 (真机踩过)
+        log "hot-apply: 首次启动失败, 清理后重试一次 ..."
+        sleep 2
+        if [ -d "${APP_DIR}/target" ] && id dsh >/dev/null 2>&1; then
+            chown -R dsh:dsh "${APP_DIR}/target" 2>/dev/null || true
+        fi
+        fuser -k "${DSH_PORT}/tcp" 2>/dev/null || true
+        sleep 1
+        _hot_start
         ret=$?
     fi
     if [ $ret -eq 0 ]; then
