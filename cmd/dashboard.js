@@ -396,44 +396,64 @@ function restartDsh() {
 // ---- 更新下载 / 热安装 ----
 // 下载进度 (issue #4): 全局状态供 /api/update/state 轮询, 前端渲染进度条.
 // req 引用用于「停止下载」: destroy 当前请求 → downloadToFile reject → 清理 .part
-const dlState = { busy: false, file: null, received: 0, total: 0, speed: 0, startedAt: 0, err: null, req: null };
+// reqs 收纳全部在途连接 (含 302 跳转链), connecting/cancelling 供建连阶段取消 (issue #11)
+const dlState = { busy: false, file: null, received: 0, total: 0, speed: 0, startedAt: 0, err: null, req: null, reqs: [], connecting: false, cancelling: false, lastDataAt: 0 };
 function downloadToFile(url, dest, depth = 0) {
   // 返回 Promise<size>; 处理 30x 跳转 (Gitee 附件 → raw CDN), https/http 自适应.
   // 先写 .part 临时名, 完成后改名 — 中断/取消不会留下可被误装的半成品 fpk
+  // 修复点 (issue #11):
+  //   a) 建连/跳转阶段也要能取消 (connecting + cancelling 标志, 不等 req 就位)
+  //   b) 所有在途 req 收进 dlState.reqs, 停止时逐个 destroy (跳转链不漏掉旧连接)
+  //   c) 60s 停滞看门狗: GitHub 直链半死连接以零星字节反复重置 idle 超时,
+  //      单靠 req timeout 永不触发 → 下载条卡死且 Promise 不 settle
+  //   d) req "close" 兜底 settle, 避免 destroy 后 error 事件不来导致 Promise 悬挂
   return new Promise(async (resolve, reject) => {
     if (depth > 5) return reject(new Error("too many redirects"));
     const partFile = dest + ".part";
+    let settled = false, watchdog = null, req = null;
+    const done = (fn, v) => { if (settled) return; settled = true; if (watchdog) { clearInterval(watchdog); watchdog = null; } fn(v); };
+    const fail = e => done(reject, e);
     try {
-      const req = await makeRequest(url, { timeout: 120000, headers: { "User-Agent": "dsh-dashboard" } });
+      dlState.connecting = true;
+      req = await makeRequest(url, { timeout: 120000, headers: { "User-Agent": "dsh-dashboard" } });
+      dlState.connecting = false;
+      dlState.reqs.push(req);
       dlState.req = req;
+      if (dlState.cancelling) { try { req.destroy(); } catch {} return fail(new Error("cancelled")); }
       req.on("response", res => {
         if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) {
           res.resume();
-          return downloadToFile(new URL(res.headers.location, url).href, dest, depth + 1).then(resolve, reject);
+          return downloadToFile(new URL(res.headers.location, url).href, dest, depth + 1).then(v => done(resolve, v), fail);
         }
-        if (res.statusCode !== 200) { res.resume(); return reject(new Error("HTTP " + res.statusCode)); }
+        if (res.statusCode !== 200) { res.resume(); return fail(new Error("HTTP " + res.statusCode)); }
         dlState.total = Number(res.headers["content-length"]) || 0;
-        dlState.received = 0; dlState.startedAt = Date.now();
+        dlState.received = 0; dlState.startedAt = Date.now(); dlState.lastDataAt = Date.now();
+        watchdog = setInterval(() => {
+          if (Date.now() - dlState.lastDataAt > 60000) { try { req.destroy(); } catch {} fail(new Error("stalled")); }
+        }, 5000);
         let lastT = Date.now(), lastR = 0;
         const out = fs.createWriteStream(partFile);
         res.on("data", c => {
           dlState.received += c.length;
+          dlState.lastDataAt = Date.now();
           const now = Date.now();
           if (now - lastT >= 500) { dlState.speed = Math.round((dlState.received - lastR) / ((now - lastT) / 1000)); lastT = now; lastR = dlState.received; }
         });
+        res.on("error", fail);
         res.pipe(out);
         out.on("finish", () => {
           out.close(() => {
-            try { fs.renameSync(partFile, dest); } catch (e) { return reject(e); }
-            resolve(fs.statSync(dest).size);
+            try { fs.renameSync(partFile, dest); } catch (e) { return fail(e); }
+            done(resolve, fs.statSync(dest).size);
           });
         });
-        out.on("error", reject);
+        out.on("error", fail);
       });
-      req.on("timeout", () => { req.destroy(); reject(new Error("timeout")); });
-      req.on("error", reject);
+      req.on("timeout", () => { try { req.destroy(); } catch {} fail(new Error("timeout")); });
+      req.on("error", fail);
+      req.on("close", () => { if (!settled && dlState.cancelling) fail(new Error("cancelled")); });
       req.end();
-    } catch (e) { reject(e); }
+    } catch (e) { dlState.connecting = false; fail(e); }
   });
 }
 async function fetchLatestRelease() {
@@ -520,6 +540,7 @@ async function updateDownload(force = false) {
   if (!asset || !asset.url) return { ok: false, err: "Release 未含 " + ARCH + " 架构 fpk 附件 (0.1.7 起 Gitee 超 100MB 上限停传, 需 GitHub 可达)" };
   if (!force && tag === cur && !rel.prerelease) return { ok: false, err: "当前已是最新版本 " + cur, same: true };
   updateBusy = true; dlState.busy = true; dlState.err = null; dlState.file = asset.name; dlState.received = 0; dlState.total = 0; dlState.speed = 0;
+  dlState.reqs = []; dlState.req = null; dlState.connecting = false; dlState.cancelling = false; dlState.lastDataAt = Date.now();
   let dest = null;
   try {
     const dir = selectedUpdateDir();
@@ -533,9 +554,9 @@ async function updateDownload(force = false) {
     dlState.err = String(e.message || e);
     // 清掉 .part 半成品 (取消/失败都不残留)
     try { if (dest) fs.rmSync(dest + ".part", { force: true }); } catch {}
-    const msg = dlState.err === "cancelled" ? "下载已停止" : "下载失败: " + (e.message || e);
+    const msg = dlState.err === "cancelled" ? "下载已停止" : dlState.err === "stalled" ? "下载停滞 (60 秒无数据), 已中止" : "下载失败: " + (e.message || e);
     return { ok: false, stopped: dlState.err === "cancelled", err: msg };
-  } finally { updateBusy = false; dlState.busy = false; }
+  } finally { updateBusy = false; dlState.busy = false; dlState.connecting = false; dlState.reqs = []; dlState.req = null; }
 }
 function updateApply() {
   // sudo -n: 未授权时立即失败 (不挂起), 返回一次性授权命令
@@ -996,12 +1017,13 @@ function renderProgress(s){
   const eta=(s.total&&s.speed)?Math.max(0,Math.round((s.total-s.received)/s.speed))+"s":"-";
   const bar=s.total?'<div class="bar"><div class="bar-in" style="width:'+pct+'%"></div></div>':'<div class="bar"><div class="bar-ind"></div></div>';
   area.innerHTML='<div style="margin-top:8px">'+bar+
-  '<div class="row num" style="justify-content:space-between;color:var(--text-2);font-size:12px"><span>'+(s.total?pct+"% · ":"")+humanSize(s.received)+(s.total?" / "+humanSize(s.total):"")+"</span><span>"+t("dlSpeed")+" "+spd+(s.total?" · "+t("dlEta")+" "+eta:"")+'</span><button class="btn" onclick="stopDownload(this)">'+svg(ICONS.x)+"<span>"+t("dlStop")+"</span></button></div></div>";
+  '<div class="row num" style="justify-content:space-between;color:var(--text-2);font-size:12px"><span>'+(s.total?pct+"% · ":"")+humanSize(s.received)+(s.total?" / "+humanSize(s.total):"")+"</span><span>"+t("dlSpeed")+" "+spd+(s.total?" · "+t("dlEta")+" "+eta:"")+'</span><button class="btn" onclick="stopDownload(this)"'+(s.cancelling?' disabled':'')+'>'+svg(ICONS.x)+"<span>"+t("dlStop")+"</span></button></div></div>";
 }
 async function stopDownload(btn){
   btn.disabled=true;
   const d=await api("/api/update/stop",{method:"POST"});
-  d&&d.ok?toast(t("dlStopped")):toast((d&&d.err)||t("opFail"),1);
+  if(d&&d.ok){toast(t("dlStopped"))}
+  else{btn.disabled=false;toast((d&&d.err)||t("opFail"),1)}
 }
 async function copyLink(btn){
   btn.disabled=true;
@@ -1245,10 +1267,15 @@ const server = http.createServer(async (req, res) => {
     if (u.pathname === "/api/update/apply" && req.method === "POST") return send(200, JSON.stringify(updateApply()));
     if (u.pathname === "/api/update/hot-apply" && req.method === "POST") return send(200, JSON.stringify(updateHotApply()));
     if (u.pathname === "/api/update/stop" && req.method === "POST") {
-      // 停止下载: destroy 当前请求 → downloadToFile reject → updateDownload 清理 .part
-      if (!dlState.busy || !dlState.req) return send(200, JSON.stringify({ ok: false, err: "无进行中的下载" }));
-      try { dlState.req.destroy(new Error("cancelled")); } catch {}
-      return send(200, JSON.stringify({ ok: true }));
+      // 停止下载 (issue #11): 先置 cancelling (建连/跳转阶段也能生效), 再 destroy 所有在途 req
+      // → downloadToFile reject("cancelled") → updateDownload 清理 .part 并复位按钮
+      if (!dlState.busy) return send(200, JSON.stringify({ ok: false, err: "无进行中的下载" }));
+      dlState.cancelling = true;
+      const targets = dlState.reqs.slice();
+      if (dlState.req && !targets.includes(dlState.req)) targets.push(dlState.req);
+      let n = 0;
+      for (const r of targets) { try { r.destroy(); n++; } catch {} }
+      return send(200, JSON.stringify({ ok: true, cancelled: n, connecting: dlState.connecting }));
     }
     if (u.pathname === "/api/update/url" && req.method === "GET") {
       // 直链给 IDM/浏览器下载: 用户拿链接自行下载后, 经飞牛文件管理器/SMB 传入
@@ -1286,7 +1313,7 @@ const server = http.createServer(async (req, res) => {
         files: updateFiles(),
         sudoHint: sudoHintFor(cur),
         ...sudoAuthStatus(),
-        downloading: dlState.busy, file: dlState.file,
+        downloading: dlState.busy, connecting: dlState.connecting, cancelling: dlState.cancelling, file: dlState.file,
         received: dlState.received, total: dlState.total, speed: dlState.speed,
         lastError: dlState.err,
       }));
