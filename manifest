@@ -1,8 +1,8 @@
 appname               = dsh
-version               = 0.2.1-rc.2
+version               = 0.2.1-rc.5
 display_name          = DeepSeek Harness
-desc                  = DeepSeek Harness 自托管版 — 基于 @deepseek-ai/dsh v0.2.1-rc.2，离线打包，局域网直连 NAS_IP:28000，管理面板 :28001
-changelog             = v0.2.1-rc.2: 升级上游 0.2.1-rc.2（适配 DeepSeek-V4.1-Flash-1017、Search/Fetch API、自定义插件源与全生命周期管理、官方实验性扩展包等）
+desc                  = DeepSeek Harness 自托管版 — 基于 @deepseek-ai/dsh v0.2.1-rc.5，离线打包，局域网直连 NAS_IP:28000，管理面板 :28001
+changelog             = v0.2.1-rc.5: 升级上游 0.2.1-rc.5（侧栏更多菜单、会话切换草稿修复、ACP 输出修复、思考内容展示优化）；修复面板更新下载卡死与停止无效 (#11)
 platform              = x86
 source                = thirdparty
 maintainer            = techysy
