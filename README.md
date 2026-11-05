@@ -30,7 +30,7 @@
 | ARM | `dsh-<版本>-iframe-arm.fpk` | **推荐**：fnOS 桌面窗口内打开 |
 | ARM | `dsh-<版本>-arm.fpk` | 桌面图标在浏览器新标签页打开 |
 
-> 版本号**跟随上游** `@deepseek-ai/dsh` 发行版（目前均为 `-rc` 预览版本，如 `0.1.7-rc.2`），本地修复不单独抬版本号。
+> 版本号 = **上游** `@deepseek-ai/dsh` 发行版 + **纯数字本地构建段**（如 `0.2.2-rc.1.1` = 上游 rc.1 + 第 1 次本地修复）。上游升级时构建段清零，本地修复递增 —— 同版本号重打包会被 fnOS `install-fpk` 静默跳过，详见 [docs/packaging-fpk.md](docs/packaging-fpk.md) §1。
 > 全部为**离线包**（内置对应架构的 `node_modules`），安装时无需联网拉取 dsh；单个 fpk 约 120 MB。0.1.7 起 fpk 超过 Gitee 附件 100 MB 上限，**安装包只在 GitHub Release 提供**。
 > 依赖应用：安装时 fnOS 自动安装 **nodejs_v24** 与 **bunjs**（manifest `install_dep_apps`）。manifest 未声明最低 fnOS / 应用中心版本。
 > ARM 版在 `manylinux_2_28` 容器中编译原生模块，要求系统 glibc ≥ 2.28（fnOS ARM 设备为 Debian 12 / glibc 2.36）。
@@ -134,7 +134,8 @@
 | **插件管理** | 数据源合并 bundles ∪ dependencies：第三方插件与**官方实验性插件**（`@deepseek-ai/dsh-experimental-*`，如语音输入）**禁用 / 启用 / 删除 / 安装**（改 `profiles/web/package.json` 的 bundles，重启 dsh 生效）；官方插件安装时自动钉到已装 dsh 版本（安装前明示确认），默认源失败回退 npmmirror，失败原因可读化；官方插件与 dsh 版本一致性检查 |
 | **版本检查** | 上游版本优先取 GitHub `deepseek-ai/deepseek-harness` 的 Release Tag，取不到回退 npmmirror / npmjs；本项目最新 Release 优先 GitHub、Gitee 兜底；fpk 升级后首访显示更新横幅 |
 | **一键重启 dsh** | 经 `cmd/main restart` 执行，面板自身不受影响 |
-| **📥 一键更新** | 从 GitHub 直链下载本机架构的 iframe 变体 fpk（**实时进度条**：百分比 / 速度 / 剩余时间；**下载目录可选** —— fnOS ≥ 1.34.0 经[开放平台 API](https://developer.fnnas.com/api/overview/)读取应用授权目录，老系统回退默认 `dsh_home/update/`），再点「安装更新」经 `appcenter-cli install-fpk` 完成安装与重启；sudo 白名单一次配置永久生效（仅限所选目录内的 fpk），面板可探测已授权状态 |
+| **📥 一键更新** | 从 GitHub 直链下载本机架构的 iframe 变体 fpk（**实时进度条**：百分比 / 速度 / 剩余时间；**停滞看门狗**：60 秒无数据自动中止；**停止按钮**任意阶段生效；**下载目录可选** —— fnOS ≥ 1.34.0 经[开放平台 API](https://developer.fnnas.com/api/overview/)读取应用授权目录，老系统回退默认 `dsh_home/update/`），再点「安装更新」经 `appcenter-cli install-fpk` 完成安装与重启；sudo 白名单一次配置永久生效（仅限所选目录内的 fpk），面板可探测已授权状态 |
+| **⬆️ 上传 fpk 安装** | NAS 拉不到 GitHub 时的离线通道：在本机浏览器选择 Release 的 `.fpk` 直接上传到 NAS 的 update 目录，随后一键安装 / 强制覆盖热安装，全程不依赖 NAS 访问外网；流式落盘（大文件不进内存）、zip 魔数校验、600 MB 上限、60 秒空闲看门狗、中断自动清理、路径穿越防护；目录内有多个 fpk 时可逐个选择安装 |
 | **出站代理** | 面板内配置 GitHub/Gitee 代理（HTTP CONNECT 隧道），与 dsh 主进程共用 `proxy.conf`，面板立即生效、dsh 重启后生效 |
 | **界面** | UI 对齐 [CreditDaddy](https://github.com/techysy/CreditDaddy) 设计语言（视图导航 / panel+toolbar / 卡片 / 胶囊状态 / SVG 图标 / dsh 鲸鱼 logo），日 / 夜主题、中英双语 |
 
