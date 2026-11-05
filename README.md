@@ -363,7 +363,8 @@ bash scripts/package-arm-offline.sh node_modules-arm64-<sha>.tar.gz  # ARM：用
 
 <p>
   <a href="https://github.com/techysy" title="techysy — 主要维护者"><img src="https://github.com/techysy.png?size=80" width="48" height="48" alt="techysy" /></a>
-  <a href="https://github.com/Solismuchengxue" title="Solismuchengxue (曹政) — #9 图片输入 EACCES 根因定位与修复"><img src="https://github.com/Solismuchengxue.png?size=80" width="48" height="48" alt="Solismuchengxue" /></a>
+    <a href="https://github.com/cygnushan" title="cygnushan — #14 代理残留根因定位与真机验证 + PR #15"><img src="https://github.com/cygnushan.png?size=80" width="48" height="48" alt="cygnushan" /></a>
+<a href="https://github.com/Solismuchengxue" title="Solismuchengxue (曹政) — #9 图片输入 EACCES 根因定位与修复"><img src="https://github.com/Solismuchengxue.png?size=80" width="48" height="48" alt="Solismuchengxue" /></a>
   <a href="https://github.com/xiehuc" title="xiehuc — #5 反馈 + cordis.patch.yml 保留修复 PR"><img src="https://github.com/xiehuc.png?size=80" width="48" height="48" alt="xiehuc" /></a>
   <a href="https://github.com/fffy520" title="fffy520 — #2 工作区落共享目录建议"><img src="https://github.com/fffy520.png?size=80" width="48" height="48" alt="fffy520" /></a>
   <a href="https://github.com/wendellace" title="wendellace — #3 prefix 路由 400 反馈"><img src="https://github.com/wendellace.png?size=80" width="48" height="48" alt="wendellace" /></a>

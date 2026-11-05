@@ -33,6 +33,8 @@
 - **官方实验性插件版本精准识别**：扩充插件版本检索范围至应用内置的 `server/node_modules` 目录，正确读出出厂自带插件版本号（如 `0.2.2-rc.1`），消除官方插件在面板中被误显示为“未安装”的缺陷。
 #### 代理隧道 TLS 握手修复与环境变量覆盖修复 (#14)
 
+> 感谢 [cygnushan](https://github.com/cygnushan) 对本缺陷的根因定位、复现与真机验证（PR #15 提供的回归思路已吸收）。
+
 - **面板出站代理下载修复（关键）**：此前面板 `makeRequest` 在 HTTP CONNECT 代理隧道建立后，将原始 TCP socket 直传给 `https.request`，缺少 TLS 握手层，导致明文 HTTP 打入 443 端口被远端挂断，所有走代理的 HTTPS 下载与 API 请求均失败；现引入 `tls.connect` 正确完成 TLS 握手；
 - **出站代理环境同步修复 (#14)**：
   - `cmd/main` 改为以 `proxy.conf` 为权威事实源：清空代理时显式 `unset` 全部 6 个代理环境变量并 `--unset` Git 全局代理，不再因继承常驻面板进程环境而跳过清理；
