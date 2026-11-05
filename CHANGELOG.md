@@ -26,6 +26,15 @@
   - 面板启动时自行写入 `dashboard.pid`（仅当文件指向的进程已死才覆盖），避免「旧面板还活着」时丢失唯一线索；
   - 旧面板收到重启指令后 2s 主动关闭监听并退出，`cmd/main` 固定等待 3s 再拉起，规避端口竞争导致的 `EADDRINUSE`；
   - 面板派发的所有子进程统一补齐 `TRIM_PKGVAR` 等环境变量，避免 `cmd/main` 推导出错误的 `DATA_DIR`。
+#### 插件卡片布局优化 (#13)
+
+- **问题**：插件名被限宽 260px 后长名称（如 `@deepseek-ai/dsh-experimental-*`）被截断成 `@deepseek-ai/dsh-experimen...`；右侧状态胶囊、徽章、启用/禁用、删除按钮挤在同一行，元素高度不一致（pill 22px / badge 自适应 / btn padding 撑高），换行后高低错落。
+- **修复**：
+  - **名称独占首行**：`flex:1` 可伸缩 + `text-overflow:ellipsis`，保留完整 `title` 悬浮提示；
+  - **操作区独立第二行并右对齐**：状态 / 徽章 / 开关 / 删除统一排列，长名称不再挤压按钮；
+  - **统一控件高度 22px**：`.ops .btn`、`.ops .icon-btn`、`.badge`、`.pill` 基线对齐（`box-sizing:border-box`）；
+  - **版本缺失显示「未安装」**：bundles 里登记但 `node_modules` 未安装、依赖表无声明时，原先显示裸 `?`，现明确提示未安装。
+
 #### 🐛 修复
 
 - **缺失的 i18n 文案**（截图可见 `sudoAlready` 原文裸露）：`sudoFoot` / `sudoRecheck` / `sudoPartial` / `sudoAlready` / `cmdInstall` / `cmdHot` / `sudoPartialTip` / `applyNeedInstall` / `applyNeedHot` 共 9 个 key 中英文均未定义，已全部补齐（中英各 146 条，完全对齐）。
