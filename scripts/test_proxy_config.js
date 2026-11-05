@@ -25,7 +25,7 @@ fs.writeFileSync(helper, `const fs=require('node:fs'); fs.appendFileSync(process
 const bin = path.join(root, "bin");
 fs.mkdirSync(bin);
 for (const name of ["main", "pnpm"]) fs.writeFileSync(path.join(bin, name), '#!/bin/bash\nexec node "$CAPTURE_HELPER"\n', { mode: 0o700 });
-const env = { ...process.env, ...inherited, NO_PROXY: "example.invalid", PROXY_TEST_UNRELATED: "keep", DSH_HOME: dshHome, DATA_DIR: root, CAPTURE_FILE: capture, CAPTURE_HELPER: helper, PATH: bin + path.delimiter + process.env.PATH };
+const env = { ...process.env, ...inherited, GIT_CONFIG_GLOBAL: path.join(dshHome, ".gitconfig"), NO_PROXY: "example.invalid", PROXY_TEST_UNRELATED: "keep", DSH_HOME: dshHome, DATA_DIR: root, CAPTURE_FILE: capture, CAPTURE_HELPER: helper, PATH: bin + path.delimiter + process.env.PATH };
 let dashboard;
 
 async function waitUntil(check) {
