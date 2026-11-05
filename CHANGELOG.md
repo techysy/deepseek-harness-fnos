@@ -35,6 +35,13 @@
   - **统一控件高度 22px**：`.ops .btn`、`.ops .icon-btn`、`.badge`、`.pill` 基线对齐（`box-sizing:border-box`）；
   - **版本缺失显示「未安装」**：bundles 里登记但 `node_modules` 未安装、依赖表无声明时，原先显示裸 `?`，现明确提示未安装。
 
+#### 元数据修正：maintainer 归还上游
+
+- `manifest` 的 `maintainer` / `maintainer_url` 原先指向本项目（techysy），与 fnOS 语义不符 —— 本包是**二次打包分发**，应用中心「开发者」应显示上游：
+  - `maintainer = deepseek-ai`，`maintainer_url = https://github.com/deepseek-ai/deepseek-harness`
+  - `distributor` 保留 `techysy`，指向本项目的二次打包与面板增强
+- 伴生桌面面板 `dsh-dashboard` 是本项目原创，其 `maintainer` 保持 `techysy` 不变。
+- 顺带清理 manifest 中残留的零宽字符（U+200B），避免链接复制后 404。
 #### 🐛 修复
 
 - **缺失的 i18n 文案**（截图可见 `sudoAlready` 原文裸露）：`sudoFoot` / `sudoRecheck` / `sudoPartial` / `sudoAlready` / `cmdInstall` / `cmdHot` / `sudoPartialTip` / `applyNeedInstall` / `applyNeedHot` 共 9 个 key 中英文均未定义，已全部补齐（中英各 146 条，完全对齐）。
