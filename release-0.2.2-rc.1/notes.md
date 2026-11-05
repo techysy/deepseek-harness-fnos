@@ -115,6 +115,10 @@
 | `dsh-0.2.2-rc.1-arm.fpk` | ARM | 新标签页 |
 | `dsh-dashboard-v1.0.2.fpk` | 通用 (x86/ARM) | 伴生桌面管理面板独立窗口应用 |
 
+### 🙏 致谢
+
+- 感谢 [@cygnushan](https://github.com/cygnushan) 对 #14 出站代理缺陷的根因定位、复现与真机验证（PR #15 回归思路已吸收）。
+
 ### 🔗 访问
 
 - dsh web: `http://<NAS_IP>:28000/`
