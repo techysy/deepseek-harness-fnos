@@ -441,10 +441,16 @@ function uploadFpk(req, res, dir) {
       out.close(() => {
         if (overflow) return;
         if (!received) return done({ ok: false, code: 400, err: "文件为空" });
-        // fpk 是 zip 容器: 校验魔数, 防止误传其他文件
+        // fpk 是 gzip (tar.gz) 容器或 zip 容器: 校验魔数 (0x1f,0x8b 或 0x50,0x4b), 防止误传其他文件
         let magicOk = false;
-        try { const fd = fs.openSync(tmp, "r"); const b = Buffer.alloc(4); fs.readSync(fd, b, 0, 4, 0); fs.closeSync(fd); magicOk = b[0] === 0x50 && b[1] === 0x4b; } catch {}
-        if (!magicOk) return done({ ok: false, code: 400, err: "不是有效的 fpk (zip) 文件" });
+        try {
+          const fd = fs.openSync(tmp, "r");
+          const b = Buffer.alloc(4);
+          fs.readSync(fd, b, 0, 4, 0);
+          fs.closeSync(fd);
+          magicOk = (b[0] === 0x1f && b[1] === 0x8b) || (b[0] === 0x50 && b[1] === 0x4b);
+        } catch {}
+        if (!magicOk) return done({ ok: false, code: 400, err: "不是有效的 fpk 归档文件" });
         try { fs.renameSync(tmp, dest); } catch (e) { return done({ ok: false, code: 500, err: "保存失败: " + (e.message || e) }); }
         done({ ok: true, code: 200, name, size: received });
       });
