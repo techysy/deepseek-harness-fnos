@@ -1046,7 +1046,7 @@ let pr=d.projectRelease?('<a href="'+d.projectRelease.url+'" target="_blank" rel
 let html=kv(t("fpkVer"),esc(d.fpk))+kv(t("upstreamVer"),up)+kv(t("projectRel"),pr);
 // 上传置于最前: NAS 直连 GitHub 常失败, 本地上传是更可靠的路径; 下载/复制直链作为补充
 html+='<div class="row" style="margin-top:10px">'+
-  '<button class="btn primary" id="uploadBtn" onclick="$(\'fpkInput\').click()">'+svg(ICONS.upload)+"<span>"+t("uploadFpk")+"</span></button>"+
+  '<button class="btn primary" id="uploadBtn" onclick="triggerUpload()">'+svg(ICONS.upload)+"<span>"+t("uploadFpk")+"</span></button>"+
   '<input type="file" id="fpkInput" accept=".fpk" style="display:none" onchange="uploadFpk(this)">'+
   '<button class="btn" id="dlBtn" onclick="hotUpdate(this,false)">'+svg(ICONS.download)+"<span>"+t("hotDownload")+'</span></button>'+
   '<button class="btn" id="forceDlBtn" onclick="hotUpdate(this,true)" title="'+t("forceDownload")+'">'+svg(ICONS.refresh)+"<span>"+t("forceDownload")+'</span></button>'+
@@ -1147,6 +1147,7 @@ async function stopDownload(btn){
   else{btn.disabled=false;toast((d&&d.err)||t("opFail"),1)}
 }
 // 本地上传 fpk: XHR (带上传进度, fetch 不支持 upload progress); 完成后刷新列表
+function triggerUpload(){const el=$("fpkInput");if(el)el.click()}
 function uploadFpk(input){
   const f=input.files&&input.files[0];if(!f)return;
   if(!/\.fpk$/i.test(f.name)){toast(t("uploadBadType"),1);input.value="";return}
@@ -1207,7 +1208,7 @@ async function applyUpdate(btnOrName){
   const name=applyTarget(btnOrName);
   const st=await api("/api/update/state");
   if(st&&!st.install){toast(t("applyNeedInstall"),1);loadVersion();return}
-  const ok=await modalConfirm({title:t("applyConfirmTitle"),text:(name?name+"\n\n":"")+t("applyConfirmMsg"),okText:t("installUpdate"),warn:true});
+  const ok=await modalConfirm({title:t("applyConfirmTitle"),text:(name?name+"\\n\\n":"")+t("applyConfirmMsg"),okText:t("installUpdate"),warn:true});
   if(!ok)return;
   const d=await api("/api/update/apply",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name})});
   if(d&&d.ok){toast(t("applySent"));setTimeout(()=>location.reload(),60000)}
@@ -1217,7 +1218,7 @@ async function applyHotUpdate(btnOrName){
   const name=applyTarget(btnOrName);
   const st=await api("/api/update/state");
   if(st&&!st.hot){toast(t("applyNeedHot"),1);loadVersion();return}
-  const ok=await modalConfirm({title:t("hotApplyConfirmTitle"),text:(name?name+"\n\n":"")+t("hotApplyConfirmMsg"),okText:t("hotApplyUpdate"),warn:true});
+  const ok=await modalConfirm({title:t("hotApplyConfirmTitle"),text:(name?name+"\\n\\n":"")+t("hotApplyConfirmMsg"),okText:t("hotApplyUpdate"),warn:true});
   if(!ok)return;
   const d=await api("/api/update/hot-apply",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name})});
   if(d&&d.ok){toast(t("hotApplySent"));setTimeout(()=>location.reload(),20000)}

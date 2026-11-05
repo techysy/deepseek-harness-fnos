@@ -26,6 +26,20 @@
   - 面板启动时自行写入 `dashboard.pid`（仅当文件指向的进程已死才覆盖），避免「旧面板还活着」时丢失唯一线索；
   - 旧面板收到重启指令后 2s 主动关闭监听并退出，`cmd/main` 固定等待 3s 再拉起，规避端口竞争导致的 `EADDRINUSE`；
   - 面板派发的所有子进程统一补齐 `TRIM_PKGVAR` 等环境变量，避免 `cmd/main` 推导出错误的 `DATA_DIR`。
+#### 客户端脚本转义修复（彻底解决面板全部变 ... 骨架未渲染问题）
+
+- **根因**：
+  1. `applyUpdate` / `applyHotUpdate` 的模态弹窗文本中使用了 `"
+
+"`，在 Node.js 模板字符串求值后直接变成了真实换行符，浏览器在解析双引号字符串时直接触发 `SyntaxError: Invalid or unexpected token`；
+  2. `uploadBtn` 原本内嵌了 `onclick="$('fpkInput').click()"`，在模板字符串求值后单引号闭合了外层单引号，浏览器触发 `SyntaxError: Unexpected identifier 'fpkInput'`；
+  3. 语法错误导致整个 `<script>` 脚本完全崩溃中断执行，`applyTheme()`、`applyStaticLang()`、`loadAll()` 全未执行，页面停留在静态骨架状态（全部呈现 `...` 和无文本按钮）。
+- **修复**：
+  - `"
+
+"` 改为 `"\n\n"` 规避模板字符串解析时的非预期断行；
+  - 提取 `triggerUpload()` 辅助函数，避免在内联 HTML 属性中拼接转义单引号；
+  - 增加自动化端到端测试，验证实际传输给浏览器的 JS 脚本语法 0 报错并通过 Chrome 无头渲染验证。
 #### 插件卡片布局优化 (#13)
 
 - **问题**：插件名被限宽 260px 后长名称（如 `@deepseek-ai/dsh-experimental-*`）被截断成 `@deepseek-ai/dsh-experimen...`；右侧状态胶囊、徽章、启用/禁用、删除按钮挤在同一行，元素高度不一致（pill 22px / badge 自适应 / btn padding 撑高），换行后高低错落。
