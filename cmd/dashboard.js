@@ -345,7 +345,23 @@ async function apiVersion() {
 const CORE_RE = /^@deepseek-ai\/(?!dsh-experimental-)/;
 const OFFICIAL_RE = /^@deepseek-ai\/dsh-experimental-/;
 function pluginModuleVersion(name) {
-  try { return JSON.parse(fs.readFileSync(path.join(PROFILE(), "node_modules", name, "package.json"), "utf8")).version || null; } catch { return null; }
+  const cands = [
+    path.join(PROFILE(), "node_modules", name, "package.json"),
+    path.join(APP_DIR, "target/server/node_modules", name, "package.json"),
+    path.join(APP_DIR, "server/node_modules", name, "package.json"),
+  ];
+  try {
+    for (const v of fs.readdirSync("/")) {
+      if (/^vol\d+$/.test(v)) cands.push(path.join("/", v, "@appcenter/dsh/server/node_modules", name, "package.json"));
+    }
+  } catch {}
+  for (const c of cands) {
+    try {
+      const v = JSON.parse(fs.readFileSync(c, "utf8")).version;
+      if (v) return v;
+    } catch {}
+  }
+  return null;
 }
 function apiPlugins() {
   const pkg = JSON.parse(fs.readFileSync(PKG_JSON(), "utf8"));
@@ -513,18 +529,128 @@ function restartDashboard() {
 
 // ---- 更新下载 / 热安装 ----
 // 下载进度 (issue #4): 全局状态供 /api/update/state 轮询, 前端渲染进度条.
-// req 引用用于「停止下载」: destroy 当前请求 → downloadToFile reject → 清理 .part
+// req / proc 引用用于「停止下载」: destroy 请求或 kill 进程 → downloadToFile reject → 清理 .part
 // reqs 收纳全部在途连接 (含 302 跳转链), connecting/cancelling 供建连阶段取消 (issue #11)
-const dlState = { busy: false, file: null, received: 0, total: 0, speed: 0, startedAt: 0, err: null, req: null, reqs: [], connecting: false, cancelling: false, lastDataAt: 0 };
-function downloadToFile(url, dest, depth = 0) {
-  // 返回 Promise<size>; 处理 30x 跳转 (Gitee 附件 → raw CDN), https/http 自适应.
-  // 先写 .part 临时名, 完成后改名 — 中断/取消不会留下可被误装的半成品 fpk
-  // 修复点 (issue #11):
-  //   a) 建连/跳转阶段也要能取消 (connecting + cancelling 标志, 不等 req 就位)
-  //   b) 所有在途 req 收进 dlState.reqs, 停止时逐个 destroy (跳转链不漏掉旧连接)
-  //   c) 60s 停滞看门狗: GitHub 直链半死连接以零星字节反复重置 idle 超时,
-  //      单靠 req timeout 永不触发 → 下载条卡死且 Promise 不 settle
-  //   d) req "close" 兜底 settle, 避免 destroy 后 error 事件不来导致 Promise 悬挂
+const dlState = { busy: false, file: null, received: 0, total: 0, speed: 0, startedAt: 0, err: null, req: null, reqs: [], proc: null, connecting: false, cancelling: false, lastDataAt: 0 };
+
+function hasAria2() {
+  try {
+    execFileSync("aria2c", ["--version"], { stdio: "ignore", timeout: 2000 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function parseAria2Size(num, unit) {
+  const n = parseFloat(num);
+  const u = (unit || "").toUpperCase();
+  if (u.startsWith("K")) return Math.round(n * 1024);
+  if (u.startsWith("M")) return Math.round(n * 1024 * 1024);
+  if (u.startsWith("G")) return Math.round(n * 1024 * 1024 * 1024);
+  return Math.round(n);
+}
+
+// 引擎 1: aria2 多线程分段加速下载 (16 线程, 断点续传, 支持代理, 速度数倍于单线程)
+function downloadWithAria2(url, dest) {
+  return new Promise((resolve, reject) => {
+    const partFile = dest + ".part";
+    const aria2File = partFile + ".aria2";
+    const dir = path.dirname(dest);
+    const outName = path.basename(partFile);
+    const proxy = readProxyConf();
+
+    const args = [
+      "-c",
+      "-s", "16",
+      "-x", "16",
+      "-k", "1M",
+      "--file-allocation=none",
+      "--summary-interval=1",
+      "--console-log-level=notice",
+      "--user-agent=dsh-dashboard",
+      "--connect-timeout=30",
+      "--timeout=60",
+      "--dir=" + dir,
+      "--out=" + outName,
+    ];
+    if (proxy && needsProxy(new URL(url).hostname)) {
+      args.push("--all-proxy=" + proxy);
+    }
+    args.push(url);
+
+    let settled = false, watchdog = null;
+    const done = (fn, v) => {
+      if (settled) return;
+      settled = true;
+      if (watchdog) { clearInterval(watchdog); watchdog = null; }
+      dlState.proc = null;
+      fn(v);
+    };
+    const fail = e => done(reject, e);
+
+    dlState.startedAt = Date.now();
+    dlState.lastDataAt = Date.now();
+    dlState.received = 0;
+    dlState.total = 0;
+    dlState.speed = 0;
+
+    watchdog = setInterval(() => {
+      if (Date.now() - dlState.lastDataAt > 60000) {
+        if (dlState.proc) { try { dlState.proc.kill("SIGTERM"); } catch {} }
+        fail(new Error("stalled"));
+      }
+    }, 5000);
+
+    let proc = null;
+    try {
+      proc = spawn("aria2c", args, { stdio: ["ignore", "pipe", "pipe"] });
+      dlState.proc = proc;
+    } catch (e) {
+      return fail(e);
+    }
+
+    if (dlState.cancelling) {
+      try { proc.kill("SIGTERM"); } catch {}
+      return fail(new Error("cancelled"));
+    }
+
+    let buf = "";
+    const onData = (chunk) => {
+      buf += chunk.toString();
+      const lines = buf.split("\n");
+      buf = lines.pop();
+      for (const line of lines) {
+        // 例: [#332152 27MiB/174MiB(15%) CN:4 DL:1.8MiB]
+        const m = line.match(/\[#\w+\s+([\d.]+)([KMGT]?i?B)\/([\d.]+)([KMGT]?i?B)(?:\((\d+)%\))?\s+CN:\d+\s+DL:([\d.]+)([KMGT]?i?B)/i);
+        if (m) {
+          dlState.received = parseAria2Size(m[1], m[2]);
+          dlState.total = parseAria2Size(m[3], m[4]);
+          dlState.speed = parseAria2Size(m[6], m[7]);
+          dlState.lastDataAt = Date.now();
+        }
+      }
+    };
+
+    proc.stdout.on("data", onData);
+    proc.stderr.on("data", onData);
+
+    proc.on("error", fail);
+    proc.on("close", (code) => {
+      if (dlState.cancelling) return fail(new Error("cancelled"));
+      if (code === 0 && fs.existsSync(partFile)) {
+        try { if (fs.existsSync(aria2File)) fs.unlinkSync(aria2File); } catch {}
+        try { fs.renameSync(partFile, dest); } catch (e) { return fail(e); }
+        done(resolve, fs.statSync(dest).size);
+      } else {
+        fail(new Error(`aria2c exited with code ${code}`));
+      }
+    });
+  });
+}
+
+// 引擎 2: Node 原生单线程下载 (后备兜底: 当系统无 aria2 时使用, 带 TLS 握手与代理隧道)
+function downloadWithNode(url, dest, depth = 0) {
   return new Promise(async (resolve, reject) => {
     if (depth > 5) return reject(new Error("too many redirects"));
     const partFile = dest + ".part";
@@ -541,7 +667,7 @@ function downloadToFile(url, dest, depth = 0) {
       req.on("response", res => {
         if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) {
           res.resume();
-          return downloadToFile(new URL(res.headers.location, url).href, dest, depth + 1).then(v => done(resolve, v), fail);
+          return downloadWithNode(new URL(res.headers.location, url).href, dest, depth + 1).then(v => done(resolve, v), fail);
         }
         if (res.statusCode !== 200) { res.resume(); return fail(new Error("HTTP " + res.statusCode)); }
         dlState.total = Number(res.headers["content-length"]) || 0;
@@ -573,6 +699,13 @@ function downloadToFile(url, dest, depth = 0) {
       req.end();
     } catch (e) { dlState.connecting = false; fail(e); }
   });
+}
+
+function downloadToFile(url, dest) {
+  if (hasAria2()) {
+    return downloadWithAria2(url, dest);
+  }
+  return downloadWithNode(url, dest);
 }
 async function fetchLatestRelease() {
   // GitHub 优先: 0.1.7-rc.1 起 fpk >100MB 超 Gitee 附件上限, Release 附件只在 GitHub;
@@ -664,17 +797,20 @@ async function updateDownload(force = false) {
     const dir = selectedUpdateDir();
     fs.mkdirSync(dir, { recursive: true });
     // 清理旧下载
-    for (const f of fs.readdirSync(dir)) if (f.endsWith(".fpk") || f.endsWith(".part")) fs.unlinkSync(path.join(dir, f));
+    for (const f of fs.readdirSync(dir)) if (f.endsWith(".fpk") || f.endsWith(".part") || f.endsWith(".aria2")) fs.unlinkSync(path.join(dir, f));
     dest = path.join(dir, asset.name);
     const size = await downloadToFile(asset.url, dest);
     return { ok: true, file: dest, size, tag: rel.tag_name };
   } catch (e) {
     dlState.err = String(e.message || e);
-    // 清掉 .part 半成品 (取消/失败都不残留)
-    try { if (dest) fs.rmSync(dest + ".part", { force: true }); } catch {}
+    // 清掉 .part 及 .aria2 半成品 (取消/失败都不残留)
+    try { if (dest) { fs.rmSync(dest + ".part", { force: true }); fs.rmSync(dest + ".part.aria2", { force: true }); } } catch {}
     const msg = dlState.err === "cancelled" ? "下载已停止" : dlState.err === "stalled" ? "下载停滞 (60 秒无数据), 已中止" : "下载失败: " + (e.message || e);
     return { ok: false, stopped: dlState.err === "cancelled", err: msg };
-  } finally { updateBusy = false; dlState.busy = false; dlState.connecting = false; dlState.reqs = []; dlState.req = null; }
+  } finally {
+    updateBusy = false; dlState.busy = false; dlState.connecting = false;
+    dlState.reqs = []; dlState.req = null; dlState.proc = null;
+  }
 }
 // 选定要装的 fpk: 显式指定名字时校验必须真实存在于 update 目录; 否则沿用「排序最后一个」
 function pickUpdateFile(name) {
@@ -821,9 +957,9 @@ html[data-theme="dark"] .nav button.active .cnt{background:rgba(0,0,0,.12)}
 .sudo-details[open]>summary::before{content:"▾ "}
 .pcard-title{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13px;font-weight:700}
 .hint{color:var(--text-3);font-size:11px;font-weight:500}
-.list{display:grid;grid-template-columns:repeat(auto-fill,minmax(440px,1fr));gap:4px 10px;padding:10px}
-.card{position:relative;padding:11px 12px 12px;border-radius:12px;transition:background .12s;min-width:0}
-.card:hover{background:var(--hover)}
+.list{display:grid;grid-template-columns:repeat(auto-fill,minmax(400px,1fr));gap:12px;padding:12px 14px}
+.card{position:relative;padding:14px 16px;border-radius:14px;background:var(--surface);border:1px solid var(--border);box-shadow:0 1px 3px rgba(0,0,0,.03);transition:border-color .15s,box-shadow .15s;min-width:0}
+.card:hover{border-color:var(--border-strong);box-shadow:0 3px 10px rgba(0,0,0,.06)}
 /* issue #13: 名称与操作区分两行 —— 名称独占首行可完整显示, 徽章与按钮第二行右对齐,
    避免长插件名把按钮挤成换行/高低不齐 */
 .row1{display:flex;flex-direction:column;align-items:stretch;gap:6px;margin-bottom:7px}
@@ -1505,10 +1641,13 @@ const server = http.createServer(async (req, res) => {
       return send(200, JSON.stringify(updateHotApply(name)));
     }
     if (u.pathname === "/api/update/stop" && req.method === "POST") {
-      // 停止下载 (issue #11): 先置 cancelling (建连/跳转阶段也能生效), 再 destroy 所有在途 req
-      // → downloadToFile reject("cancelled") → updateDownload 清理 .part 并复位按钮
+      // 停止下载 (issue #11): 先置 cancelling (建连/跳转阶段也能生效), 再终止 aria2 进程或 destroy 在途 req
+      // → downloadToFile reject("cancelled") → updateDownload 清理 .part / .aria2 并复位按钮
       if (!dlState.busy) return send(200, JSON.stringify({ ok: false, err: "无进行中的下载" }));
       dlState.cancelling = true;
+      if (dlState.proc) {
+        try { dlState.proc.kill("SIGTERM"); } catch {}
+      }
       const targets = dlState.reqs.slice();
       if (dlState.req && !targets.includes(dlState.req)) targets.push(dlState.req);
       let n = 0;
