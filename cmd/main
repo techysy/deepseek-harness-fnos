@@ -927,7 +927,16 @@ hot_apply() {
         # 面板进程是独立 node 进程, 仍在跑覆盖前的旧代码 (cmd/dashboard.js 已被新包替换).
         # 不重启就看不到新面板功能 → hot-apply 成功后一并重启面板.
         log "hot-apply: 重启管理面板以加载新版本 ..."
-        restart_dashboard || log "hot-apply: WARN 面板重启失败 (可稍后在面板点「重启面板」或去应用中心重启)"
+        # 必须以 dsh 用户重启: hot-apply 本身以 root (sudo) 运行, 若直接在此调用,
+        # 面板进程会变成 root 属主 → 后续写数据区/日志出现 EACCES.
+        local dash_out="" dash_rc=0
+        if [ "$(id -u)" -eq 0 ] && id dsh >/dev/null 2>&1; then
+            dash_out="$(su -s /bin/bash dsh -c "${CMD_DIR}/main restart-dashboard" 2>&1)" || dash_rc=$?
+        else
+            dash_out="$(restart_dashboard 2>&1)" || dash_rc=$?
+        fi
+        [ -n "${dash_out}" ] && log "hot-apply: ${dash_out}"
+        [ "${dash_rc}" -ne 0 ] && log "hot-apply: WARN 面板重启失败 rc=${dash_rc} (可稍后在面板点「重启面板」或去应用中心重启)"
         echo "hot-apply: success"
     else
         # 失败时把 dsh 的启动错误摘要一并落 app.log, 面板「日志」页即可直接看到根因
