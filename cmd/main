@@ -708,6 +708,9 @@ start_dashboard() {
     if [ -f "${DASH_PID}" ] && kill -0 "$(cat "${DASH_PID}")" 2>/dev/null; then
         return 0
     fi
+    _spawn_dashboard
+}
+_spawn_dashboard() {
     DASH_NODE="${NODE_BIN}"
     [ -x "${DASH_NODE}" ] || DASH_NODE="$(command -v node)"
     [ -x "${DASH_NODE}" ] || { log "dashboard: no node, skip"; return 0; }
@@ -717,6 +720,73 @@ start_dashboard() {
       nohup "${DASH_NODE}" "${CMD_DIR}/dashboard.js" >> "${DASH_LOG}" 2>&1 &
     echo $! > "${DASH_PID}"
     log "dashboard started (pid $(cat "${DASH_PID}")) :0.0.0.0:${DASH_PORT}"
+}
+# 重启面板进程: 热安装覆盖了 cmd/dashboard.js, 但运行中的 node 进程仍是旧代码,
+# 需要杀掉重启才会加载新版本 (stop() 刻意保留 dashboard, 故不可用 restart 达成).
+restart_dashboard() {
+    local old=""
+    [ -f "${DASH_PID}" ] && old="$(cat "${DASH_PID}" 2>/dev/null)"
+    if [ -n "${old}" ] && kill -0 "${old}" 2>/dev/null; then
+        kill "${old}" 2>/dev/null
+        # 最多等 5s 优雅退出, 超时强杀
+        local i=0
+        while kill -0 "${old}" 2>/dev/null && [ "${i}" -lt 10 ]; do
+            sleep 0.5; i=$((i + 1))
+        done
+        kill -9 "${old}" 2>/dev/null || true
+        log "dashboard stopped (pid ${old})"
+    fi
+    # 兜底: pid 文件缺失/陈旧时按命令行特征清理残留面板进程 (仅限本应用路径)
+    pkill -f "${CMD_DIR}/dashboard.js" 2>/dev/null || true
+    rm -f "${DASH_PID}" 2>/dev/null
+    # 等面板端口真正释放再拉起. 旧进程可能正在优雅退出 (面板自身有自退兜底),
+    # 提前 bind 会 EADDRINUSE → 新进程直接死掉.
+    # 探测: 优先读 /proc/net/tcp{,6} (Linux 原生, 无外部依赖, 不受 busybox 差异影响),
+    # 退化为 fuser, 都不可用则跳过 (靠面板启动自身兜底).
+    port_busy() {
+        local p="$1" hex
+        hex="$(printf '%04X' "${p}")"
+        if [ -r /proc/net/tcp ]; then
+            # 第 4 列为本地地址: 主机:端口(hex), 第 2 列状态 0A = LISTEN
+            awk -v h=":${hex}" '$4=="0A" && $2 ~ (h "$") {f=1} END{exit !f}' /proc/net/tcp 2>/dev/null && return 0
+            [ -r /proc/net/tcp6 ] && awk -v h=":${hex}" '$4=="0A" && $2 ~ (h "$") {f=1} END{exit !f}' /proc/net/tcp6 2>/dev/null && return 0
+            return 1
+        fi
+        if command -v fuser >/dev/null 2>&1; then
+            fuser "${p}/tcp" >/dev/null 2>&1 && return 0 || return 1
+        fi
+        return 1
+    }
+    # 无论能否探测到端口, 都先固定等 3s: 旧面板收到重启指令后会在 2.5s 关闭监听,
+    # 这段等待覆盖其自退窗口. 能探测到端口时再追加轮询确认真实释放.
+    sleep 3
+    local w=0
+    while [ "${w}" -lt 16 ]; do
+        port_busy "${DASH_PORT}" || break
+        # 超过 4s 仍未释放 → 强制杀掉端口占用者
+        if [ "${w}" -ge 8 ] && command -v fuser >/dev/null 2>&1; then
+            log "dashboard: 端口 ${DASH_PORT} 仍被占用, 强制释放"
+            fuser -k "${DASH_PORT}/tcp" 2>/dev/null || true
+        fi
+        sleep 0.5; w=$((w + 1))
+    done
+    if port_busy "${DASH_PORT}"; then
+        log "dashboard: 端口 ${DASH_PORT} 等待超时, 仍尝试启动"
+    fi
+    start_dashboard
+    # 启动确认: 等面板写出 pid 且进程存活 (面板起来后自行落 pid, 比 $! 更可信)
+    local j=0
+    while [ "${j}" -lt 20 ]; do
+        local np
+        np="$(cat "${DASH_PID}" 2>/dev/null)"
+        if [ -n "${np}" ] && kill -0 "${np}" 2>/dev/null; then
+            echo "dashboard: restarted (pid ${np})"
+            return 0
+        fi
+        sleep 0.5; j=$((j + 1))
+    done
+    echo "dashboard: FAILED to restart (pid 未存活, 详见 ${DASH_LOG})" >&2
+    return 1
 }
 
 start() {
@@ -854,6 +924,10 @@ hot_apply() {
     fi
     if [ $ret -eq 0 ]; then
         log "hot-apply: 热安装完成，服务运行正常"
+        # 面板进程是独立 node 进程, 仍在跑覆盖前的旧代码 (cmd/dashboard.js 已被新包替换).
+        # 不重启就看不到新面板功能 → hot-apply 成功后一并重启面板.
+        log "hot-apply: 重启管理面板以加载新版本 ..."
+        restart_dashboard || log "hot-apply: WARN 面板重启失败 (可稍后在面板点「重启面板」或去应用中心重启)"
         echo "hot-apply: success"
     else
         # 失败时把 dsh 的启动错误摘要一并落 app.log, 面板「日志」页即可直接看到根因
@@ -880,6 +954,7 @@ case "${1:-}" in
     stop) stop ;;
     status) status ;;
     restart) stop; sleep 1; start ;;
+    restart-dashboard) restart_dashboard ;;
     hot-apply) shift; hot_apply "$@" ;;
-    *) echo "usage: $0 {start|stop|status|restart|hot-apply <fpk>}"; exit 1 ;;
+    *) echo "usage: $0 {start|stop|status|restart|restart-dashboard|hot-apply <fpk>}"; exit 1 ;;
 esac

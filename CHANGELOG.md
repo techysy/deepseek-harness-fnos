@@ -16,6 +16,16 @@
   - **中断无残留**：上传中止/失败自动删除 `.uploading` 半成品。
 - **多文件逐个安装**：update 目录存在多个 fpk 时，列表每行出现「装这个」按钮，不再只能安装排序最后一个；安装/热安装接口新增可选 `name` 参数（服务端校验必须真实存在于列表内，不存在则安全回退，杜绝任意路径）。
 
+#### 重启面板（热安装后加载新代码）
+
+- **问题**：热安装只重启 dsh/proxy，`stop()` 刻意保留面板进程，`start_dashboard()` 见 pid 存活即跳过 —— 结果面板始终运行覆盖前的旧 `cmd/dashboard.js`，用户看不到新功能，只能重启整个应用。
+- **修复**：
+  - `cmd/main` 新增 `restart-dashboard` 子命令：优雅终止面板（SIGTERM → 5s 后 SIGKILL），等待端口真正释放后拉起新进程，并校验新 pid 存活；
+  - `hot-apply` 成功落地后**自动重启面板**，无需用户手动操作；
+  - 面板工具栏新增「重启面板」按钮 + `POST /api/dashboard/restart`，确认弹窗 → 派发 → 轮询 pid 变化 → 成功后整页刷新加载新 UI；
+  - 面板启动时自行写入 `dashboard.pid`（仅当文件指向的进程已死才覆盖），避免「旧面板还活着」时丢失唯一线索；
+  - 旧面板收到重启指令后 2s 主动关闭监听并退出，`cmd/main` 固定等待 3s 再拉起，规避端口竞争导致的 `EADDRINUSE`；
+  - 面板派发的所有子进程统一补齐 `TRIM_PKGVAR` 等环境变量，避免 `cmd/main` 推导出错误的 `DATA_DIR`。
 #### 🐛 修复
 
 - **缺失的 i18n 文案**（截图可见 `sudoAlready` 原文裸露）：`sudoFoot` / `sudoRecheck` / `sudoPartial` / `sudoAlready` / `cmdInstall` / `cmdHot` / `sudoPartialTip` / `applyNeedInstall` / `applyNeedHot` 共 9 个 key 中英文均未定义，已全部补齐（中英各 146 条，完全对齐）。

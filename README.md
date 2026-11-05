@@ -134,6 +134,7 @@
 | **插件管理** | 数据源合并 bundles ∪ dependencies：第三方插件与**官方实验性插件**（`@deepseek-ai/dsh-experimental-*`，如语音输入）**禁用 / 启用 / 删除 / 安装**（改 `profiles/web/package.json` 的 bundles，重启 dsh 生效）；官方插件安装时自动钉到已装 dsh 版本（安装前明示确认），默认源失败回退 npmmirror，失败原因可读化；官方插件与 dsh 版本一致性检查 |
 | **版本检查** | 上游版本优先取 GitHub `deepseek-ai/deepseek-harness` 的 Release Tag，取不到回退 npmmirror / npmjs；本项目最新 Release 优先 GitHub、Gitee 兜底；fpk 升级后首访显示更新横幅 |
 | **一键重启 dsh** | 经 `cmd/main restart` 执行，面板自身不受影响 |
+| **重启面板** | 工具栏按钮 / `POST /api/dashboard/restart`：热安装覆盖 `cmd/dashboard.js` 后重载面板进程以加载新代码（热安装成功时会自动执行） |
 | **📥 一键更新** | 从 GitHub 直链下载本机架构的 iframe 变体 fpk（**实时进度条**：百分比 / 速度 / 剩余时间；**停滞看门狗**：60 秒无数据自动中止；**停止按钮**任意阶段生效；**下载目录可选** —— fnOS ≥ 1.34.0 经[开放平台 API](https://developer.fnnas.com/api/overview/)读取应用授权目录，老系统回退默认 `dsh_home/update/`），再点「安装更新」经 `appcenter-cli install-fpk` 完成安装与重启；sudo 白名单一次配置永久生效（仅限所选目录内的 fpk），面板可探测已授权状态 |
 | **⬆️ 上传 fpk 安装** | NAS 拉不到 GitHub 时的离线通道：在本机浏览器选择 Release 的 `.fpk` 直接上传到 NAS 的 update 目录，随后一键安装 / 强制覆盖热安装，全程不依赖 NAS 访问外网；流式落盘（大文件不进内存）、zip 魔数校验、600 MB 上限、60 秒空闲看门狗、中断自动清理、路径穿越防护；目录内有多个 fpk 时可逐个选择安装 |
 | **出站代理** | 面板内配置 GitHub/Gitee 代理（HTTP CONNECT 隧道），与 dsh 主进程共用 `proxy.conf`，面板立即生效、dsh 重启后生效 |
