@@ -1008,17 +1008,18 @@ if(d.upstreamDsh){
 } else up='<span class="dim">'+t("detectFail")+"</span>";
 let pr=d.projectRelease?('<a href="'+d.projectRelease.url+'" target="_blank" rel="noopener" style="text-decoration:underline">'+esc(d.projectRelease.tag)+"</a>"):'<span class="dim">'+t("detectFail")+"</span>";
 let html=kv(t("fpkVer"),esc(d.fpk))+kv(t("upstreamVer"),up)+kv(t("projectRel"),pr);
+// 上传置于最前: NAS 直连 GitHub 常失败, 本地上传是更可靠的路径; 下载/复制直链作为补充
 html+='<div class="row" style="margin-top:10px">'+
-  '<button class="btn primary" id="dlBtn" onclick="hotUpdate(this,false)">'+svg(ICONS.download)+"<span>"+t("hotDownload")+'</span></button>'+
+  '<button class="btn primary" id="uploadBtn" onclick="$(\'fpkInput\').click()">'+svg(ICONS.upload)+"<span>"+t("uploadFpk")+"</span></button>"+
+  '<input type="file" id="fpkInput" accept=".fpk" style="display:none" onchange="uploadFpk(this)">'+
+  '<button class="btn" id="dlBtn" onclick="hotUpdate(this,false)">'+svg(ICONS.download)+"<span>"+t("hotDownload")+'</span></button>'+
   '<button class="btn" id="forceDlBtn" onclick="hotUpdate(this,true)" title="'+t("forceDownload")+'">'+svg(ICONS.refresh)+"<span>"+t("forceDownload")+'</span></button>'+
   '<button class="btn" id="linkBtn" onclick="copyLink(this)">'+svg(ICONS.copy)+"<span>"+t("copyLink")+"</span></button>"+
-  '<button class="btn" id="uploadBtn" onclick="$(\'fpkInput\').click()">'+svg(ICONS.upload)+"<span>"+t("uploadFpk")+"</span></button>"+
-  '<input type="file" id="fpkInput" accept=".fpk" style="display:none" onchange="uploadFpk(this)">'+
   '<span class="hint">'+t("hotHint")+"</span></div>";
-html+='<div id="dlArea"></div>';
 // 上传说明: 明确这是「NAS 拉不到 GitHub 时」的离线通道, 上传后直接走下方安装按钮
 html+='<div class="hint" style="margin-top:4px">'+t("uploadHint")+"</div>";
 html+='<div id="upArea"></div>';
+html+='<div id="dlArea"></div>';
 // 已下载的更新 + 授权状态 + 下载目录选择
 const st=await api("/api/update/state");
 if(st){
