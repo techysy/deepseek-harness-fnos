@@ -181,6 +181,7 @@ function humanSize(n) {
 // ---- 出站代理 (issue #4): 与 dsh 主进程共用 proxy.conf (PROXY=http://IP:PORT),
 // 面板对 GitHub/Gitee 的 API 探测与 fpk 下载经 HTTP 代理 CONNECT 隧道转发.
 // 仅代理公网地址; 回环/局域网直连, 不影响健康检查与 NAS 内部通信.
+const PROXY_ENV_NAMES = ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"];
 function readProxyConf() {
   try {
     const f = path.join(DATA_DIR, "dsh_home", "proxy.conf");
@@ -188,6 +189,17 @@ function readProxyConf() {
     if (line) { const v = line.slice(6).trim(); if (/^https?:\/\/.+/.test(v)) return v; }
   } catch {}
   return null;
+}
+// 每次派生进程都以当前保存值覆盖旧环境; 空配置明确清除, 缺文件保留外部配置.
+function proxyEnvironment() {
+  const env = { ...process.env };
+  if (!fs.existsSync(path.join(DATA_DIR, "dsh_home", "proxy.conf"))) return env;
+  const proxy = readProxyConf();
+  for (const name of PROXY_ENV_NAMES) {
+    if (proxy) env[name] = proxy;
+    else delete env[name];
+  }
+  return env;
 }
 function needsProxy(host) {
   if (!host) return false;
@@ -455,7 +467,7 @@ function uploadFpk(req, res, dir) {
 // 面板子进程所需的完整环境: cmd/main 依赖 TRIM_PKGVAR 推导 DATA_DIR, 面板可能是被
 // 显式 DATA_DIR 启动而未继承, 统一在这里补齐, 避免子进程写到错误路径
 function childEnv() {
-  const env = { ...process.env, DATA_DIR, DSH_HOME, APP_DIR, CMD_MAIN, DASH_PORT: String(DASH_PORT) };
+  const env = { ...proxyEnvironment(), DATA_DIR, DSH_HOME, APP_DIR, CMD_MAIN, DASH_PORT: String(DASH_PORT) };
   if (!env.TRIM_PKGVAR && DATA_DIR) env.TRIM_PKGVAR = DATA_DIR;
   return env;
 }
@@ -666,7 +678,7 @@ function updateApply(name) {
   if (!sudoAuthorized("install-fpk")) return { ok: false, err: "sudo 白名单未覆盖当前下载目录 (授权命令见下方, 路径跟随所选目录)" };
   const file = pickUpdateFile(name);
   const log = fs.openSync(path.join(DATA_DIR, "dashboard.log"), "a");
-  const child = spawn("sudo", ["-n", "/usr/local/bin/appcenter-cli", "install-fpk", file], { detached: true, stdio: ["ignore", log, log] });
+  const child = spawn("sudo", ["-n", "/usr/local/bin/appcenter-cli", "install-fpk", file], { detached: true, stdio: ["ignore", log, log], env: childEnv() });
   child.on("error", () => {});
   child.unref();
   return { ok: true, dispatched: true, file };
@@ -678,7 +690,7 @@ function updateHotApply(name) {
   if (!sudoAuthorized("hot-apply") && !sudoAuthorized(CMD_MAIN)) return { ok: false, err: "sudo 白名单未覆盖 hot-apply 命令 (请在终端执行下方授权命令)" };
   const file = pickUpdateFile(name);
   const log = fs.openSync(path.join(DATA_DIR, "dashboard.log"), "a");
-  const child = spawn("sudo", ["-n", CMD_MAIN, "hot-apply", file], { detached: true, stdio: ["ignore", log, log] });
+  const child = spawn("sudo", ["-n", CMD_MAIN, "hot-apply", file], { detached: true, stdio: ["ignore", log, log], env: childEnv() });
   child.on("error", () => {});
   child.unref();
   return { ok: true, dispatched: true, file };
@@ -692,6 +704,20 @@ function writeProxyConf(value) {
   if (value) lines.push("PROXY=" + value);
   fs.mkdirSync(path.dirname(f), { recursive: true });
   fs.writeFileSync(f, lines.filter((l, i, a) => l !== "" || i < a.length - 1).join("\n").replace(/\n{3,}/g, "\n\n").trim() + "\n", { mode: 0o600 });
+  const env = proxyEnvironment();
+  for (const name of PROXY_ENV_NAMES) {
+    if (env[name] === undefined) delete process.env[name];
+    else process.env[name] = env[name];
+  }
+  // Git 的配置优先于代理环境变量; 保存后插件安装也应立即使用新设置.
+  for (const key of ["http.proxy", "https.proxy"]) {
+    try {
+      execFileSync("git", ["config", "--file", path.join(DSH_HOME, ".gitconfig"),
+        ...(value ? ["--replace-all", key, value] : ["--unset-all", key])], { stdio: "ignore", timeout: 5000 });
+    } catch (err) {
+      if (value || err.status !== 5) throw err; // --unset-all 对不存在的键返回 5.
+    }
+  }
 }
 // pnpm 失败可读化 (issue #8 P1.2)
 function pnpmHint(errTail) {
@@ -1550,7 +1576,7 @@ const server = http.createServer(async (req, res) => {
       if (!/^[@a-zA-Z0-9._\/-]+$/.test(name || "")) return send(400, JSON.stringify({ ok: false, err: "bad name" }));
       let pnpm = false;
       try {
-        execSync(`pnpm remove ${JSON.stringify(name)}`, { cwd: PROFILE(), stdio: "ignore", timeout: 120000, env: process.env });
+        execSync(`pnpm remove ${JSON.stringify(name)}`, { cwd: PROFILE(), stdio: "ignore", timeout: 120000, env: childEnv() });
         pnpm = true;
       } catch {}
       savePlugins((bundles) => bundles.filter(b => b !== name));
@@ -1575,7 +1601,7 @@ const server = http.createServer(async (req, res) => {
       let installed = false, errTail = "";
       for (const args of [["add", spec], ["add", spec, "--registry=https://registry.npmmirror.com"]]) {
         try {
-          execFileSync("pnpm", args, { cwd: PROFILE(), stdio: ["ignore", "pipe", "pipe"], timeout: 300000, env: process.env });
+          execFileSync("pnpm", args, { cwd: PROFILE(), stdio: ["ignore", "pipe", "pipe"], timeout: 300000, env: childEnv() });
           installed = true;
           break;
         } catch (e) { errTail = ((e.stdout || "") + (e.stderr || "")).trim().slice(-300); }

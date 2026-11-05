@@ -249,17 +249,20 @@ start_dsh() {
     # 网络代理: 默认不走代理. 仅当用户在 ${DSH_HOME}/proxy.conf 显式配置了 PROXY 才走代理.
     # (proxy.conf 始终在 @appdata 数据区, 不随工作空间迁移 — 属凭据类配置)
     # proxy.conf 内容示例:  PROXY=http://127.0.0.1:7890   (HTTP_PROXY/HTTPS_PROXY 都指向它)
-    if [ -z "${HTTP_PROXY:-}" ] && [ -z "${http_proxy:-}" ]; then
-        if [ -f "${DSH_HOME}/proxy.conf" ]; then
-            CFG_PROXY="$(grep -E '^PROXY=' "${DSH_HOME}/proxy.conf" | head -1 | cut -d= -f2-)"
-            if [ -n "${CFG_PROXY}" ]; then
-                export HTTP_PROXY="${CFG_PROXY}" HTTPS_PROXY="${CFG_PROXY}" http_proxy="${CFG_PROXY}" https_proxy="${CFG_PROXY}" ALL_PROXY="${CFG_PROXY}" all_proxy="${CFG_PROXY}"
-                git config --global http.proxy "${CFG_PROXY}" 2>/dev/null
-                git config --global https.proxy "${CFG_PROXY}" 2>/dev/null
-                log "network proxy from proxy.conf: ${CFG_PROXY}"
-            else
-                log "proxy.conf present but no PROXY= line; default no-proxy"
-            fi
+    # 已保存的配置优先于常驻面板继承的环境; 空文件明确表示直连.
+    # 文件不存在时仍允许通过外部环境配置代理.
+    if [ -f "${DSH_HOME}/proxy.conf" ]; then
+        unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy
+        CFG_PROXY="$(grep -E '^PROXY=' "${DSH_HOME}/proxy.conf" | head -1 | cut -d= -f2-)"
+        if [ -n "${CFG_PROXY}" ]; then
+            export HTTP_PROXY="${CFG_PROXY}" HTTPS_PROXY="${CFG_PROXY}" http_proxy="${CFG_PROXY}" https_proxy="${CFG_PROXY}" ALL_PROXY="${CFG_PROXY}" all_proxy="${CFG_PROXY}"
+            git config --global http.proxy "${CFG_PROXY}" 2>/dev/null
+            git config --global https.proxy "${CFG_PROXY}" 2>/dev/null
+            log "network proxy from proxy.conf: ${CFG_PROXY}"
+        else
+            git config --global --unset-all http.proxy 2>/dev/null || true
+            git config --global --unset-all https.proxy 2>/dev/null || true
+            log "proxy.conf present but no PROXY= line; default no-proxy"
         fi
     fi
     # 工作区注册表路径修复: 老布局迁移到共享区后, storages/workspace.json 里的工作区

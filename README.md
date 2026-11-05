@@ -190,7 +190,7 @@ sudo chmod 440 /etc/sudoers.d/dsh-hotfix
 PROXY=http://127.0.0.1:7890
 ```
 
-启动时据此设置 `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY` 并写入 git 全局代理，dsh 的出站请求（git / npm / API）走该代理；没有 `proxy.conf` 或没有 `PROXY=` 行则不走代理。启动环境已带 `HTTP_PROXY` 时以环境变量为准；上游 0.1.2 起也遵循 `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY` / `NO_PROXY`。
+启动时据此设置 `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY`（含小写变量）并写入应用账号的 git 全局代理，dsh 的出站请求（git / npm / API）走该代理。已保存的 `proxy.conf` 优先于继承的环境变量；在管理面板中清空代理后，后续启动 / 重启会清除这些变量及应用账号的 git 代理，恢复直连。只有 `proxy.conf` 不存在时，才沿用外部环境中的代理设置。`NO_PROXY` 保留不变。管理面板保存时也会同步应用账号的 git 代理，插件安装与重启子进程读取最新保存值；dsh 主进程仍需重启才应用变更。
 
 ### 信任域（FN Connect / 自定义域名）
 
