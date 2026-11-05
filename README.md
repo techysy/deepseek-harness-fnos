@@ -30,7 +30,7 @@
 | ARM | `dsh-<版本>-iframe-arm.fpk` | **推荐**：fnOS 桌面窗口内打开 |
 | ARM | `dsh-<版本>-arm.fpk` | 桌面图标在浏览器新标签页打开 |
 
-> 版本号 = **上游** `@deepseek-ai/dsh` 发行版 + **纯数字本地构建段**（如 `0.2.2-rc.1.1` = 上游 rc.1 + 第 1 次本地修复）。上游升级时构建段清零，本地修复递增 —— 同版本号重打包会被 fnOS `install-fpk` 静默跳过，详见 [docs/packaging-fpk.md](docs/packaging-fpk.md) §1。
+> 版本号**严格对齐上游** `@deepseek-ai/dsh` 发行版（如 `0.2.2-rc.1`），本地修复不单独抬版本号。
 > 全部为**离线包**（内置对应架构的 `node_modules`），安装时无需联网拉取 dsh；单个 fpk 约 120 MB。0.1.7 起 fpk 超过 Gitee 附件 100 MB 上限，**安装包只在 GitHub Release 提供**。
 > 依赖应用：安装时 fnOS 自动安装 **nodejs_v24** 与 **bunjs**（manifest `install_dep_apps`）。manifest 未声明最低 fnOS / 应用中心版本。
 > ARM 版在 `manylinux_2_28` 容器中编译原生模块，要求系统 glibc ≥ 2.28（fnOS ARM 设备为 Debian 12 / glibc 2.36）。
