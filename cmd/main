@@ -861,8 +861,12 @@ hot_apply() {
         return 1
     fi
 
-    # 2. 停服务
-    stop
+    # 2. 停服务: 走应用中心官方生命周期 (fnOS 依据自身记录显示 启用/停用 按钮,
+    #    内部 stop 会让应用中心状态与实际进程脱节 → 热安装后按钮停在"启用").
+    #    hot-apply 经 sudo 以 root 运行, 直接调用 appcenter-cli; 失败回退内部 stop.
+    if ! appcenter-cli stop dsh 2>/dev/null; then
+        stop
+    fi
 
     # 3. 覆盖 target 目录应用产物 (server / ui / config)
     local target_dir="${APP_DIR}/target"
@@ -870,9 +874,12 @@ hot_apply() {
         log "hot-apply: 覆盖解压 app.tgz 到 ${target_dir} ..."
         tar -zxf "${tmp_dir}/app.tgz" -C "${target_dir}"
         # fpk 内文件属主是构建机 uid (如 1001), 必须在启动前统一归属为服务账号,
-        # 否则 dsh 账号无权读写 → 补丁 open() 报 EACCES, dsh 启动失败
+        # 否则 dsh 账号对产物无写权限 → 0.0.0.0 webserver 补丁 open("w") 报 EACCES,
+        # 补丁缺失 → 上游 wildcard 校验拒绝 0.0.0.0 绑定 → dsh 启动失败.
+        # ⚠️ target 是指向 /volN/@appcenter/dsh 的软链; GNU chown -R 默认不解引用
+        # 命令行参数里的软链 (只改链本身) → 必须用 -RH 或先 readlink 解析真实路径.
         if id dsh >/dev/null 2>&1; then
-            chown -R dsh:dsh "${target_dir}" 2>/dev/null || true
+            chown -RH dsh:dsh "${target_dir}" 2>/dev/null || true
         fi
         # 归位后按权限位再校验一次: 任意文件对服务账号不可读即视为安装异常
         if [ "$(id -u)" -eq 0 ] && id dsh >/dev/null 2>&1; then
@@ -911,9 +918,21 @@ hot_apply() {
     rm -rf "${tmp_dir}"
     log "hot-apply: 产物覆盖完成，重新启动服务 ..."
 
-    # 5. 启动服务 (以 dsh 用户身份拉起，避免 root 身份残留占用端口)
+    # 5. 启动服务: 优先走应用中心官方 start (fnOS 状态同步, 按钮/判活不再脱节);
+    #    appcenter-cli 失败时回退到以 dsh 身份直启 (避免 root 身份残留占用端口).
     local ret=0
     _hot_start() {
+        if appcenter-cli start dsh >/dev/null 2>&1; then
+            # 应用中心 start 为异步分发, 轮询等待服务真正起来
+            local w=0
+            while [ "${w}" -lt 20 ]; do
+                if [ -f "${DSH_PID}" ] && kill -0 "$(cat "${DSH_PID}" 2>/dev/null)" 2>/dev/null; then
+                    return 0
+                fi
+                sleep 1; w=$((w + 1))
+            done
+            return 1
+        fi
         if [ "$(id -u)" -eq 0 ] && id dsh >/dev/null 2>&1; then
             su -s /bin/bash dsh -c "${CMD_DIR}/main start"
         else
@@ -928,7 +947,7 @@ hot_apply() {
         log "hot-apply: 首次启动失败, 清理后重试一次 ..."
         sleep 2
         if [ -d "${APP_DIR}/target" ] && id dsh >/dev/null 2>&1; then
-            chown -R dsh:dsh "${APP_DIR}/target" 2>/dev/null || true
+            chown -RH dsh:dsh "${APP_DIR}/target" 2>/dev/null || true
         fi
         fuser -k "${DSH_PORT}/tcp" 2>/dev/null || true
         sleep 1
