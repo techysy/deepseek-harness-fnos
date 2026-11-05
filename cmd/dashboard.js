@@ -14,6 +14,7 @@
 "use strict";
 const http = require("http");
 const https = require("https");
+const tls = require("tls");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
@@ -216,9 +217,17 @@ async function makeRequest(url, options = {}) {
   const proxy = readProxyConf();
   const port = Number(u.port) || (u.protocol === "https:" ? 443 : 80);
   if (proxy && needsProxy(u.hostname)) {
-    const socket = await proxyConnect(proxy, u.hostname, port, options.timeout || 15000);
-    const mod = u.protocol === "https:" ? https : http;
-    return mod.request(url, { ...options, agent: false, createConnection: () => socket });
+    const rawSocket = await proxyConnect(proxy, u.hostname, port, options.timeout || 15000);
+    if (u.protocol === "https:") {
+      // 关键修复: HTTP CONNECT 建立明文 TCP 隧道后, HTTPS 必须经由 tls.connect 完成 TLS 握手
+      // (此前将 rawSocket 直传给 https.request 导致明文 HTTP 打入 443 端口被挂断，走代理下载全失败)
+      const tlsSocket = tls.connect({
+        socket: rawSocket,
+        servername: u.hostname,
+      });
+      return https.request(url, { ...options, agent: false, createConnection: () => tlsSocket });
+    }
+    return http.request(url, { ...options, agent: false, createConnection: () => rawSocket });
   }
   const mod = u.protocol === "https:" ? https : http;
   return mod.request(url, options);
@@ -458,11 +467,21 @@ function uploadFpk(req, res, dir) {
     req.pipe(out);
   });
 }
+// 代理环境变量列表 (issue #14)
+const PROXY_KEYS = ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"];
+
 // 面板子进程所需的完整环境: cmd/main 依赖 TRIM_PKGVAR 推导 DATA_DIR, 面板可能是被
-// 显式 DATA_DIR 启动而未继承, 统一在这里补齐, 避免子进程写到错误路径
+// 显式 DATA_DIR 启动而未继承, 统一在这里补齐, 避免子进程写到错误路径.
+// 同时严格以最新的 proxy.conf 为准同步代理变量 (issue #14: 清空代理后不继承旧代理环境变量).
 function childEnv() {
   const env = { ...process.env, DATA_DIR, DSH_HOME, APP_DIR, CMD_MAIN, DASH_PORT: String(DASH_PORT) };
   if (!env.TRIM_PKGVAR && DATA_DIR) env.TRIM_PKGVAR = DATA_DIR;
+  const curProxy = readProxyConf();
+  if (curProxy) {
+    for (const k of PROXY_KEYS) env[k] = curProxy;
+  } else {
+    for (const k of PROXY_KEYS) delete env[k];
+  }
   return env;
 }
 function restartDsh() {
@@ -689,7 +708,7 @@ function updateHotApply(name) {
   child.unref();
   return { ok: true, dispatched: true, file };
 }
-// 代理设置 (issue #4): 写回 proxy.conf 与 dsh 主进程共用 (重启后 dsh 也走代理)
+// 代理设置 (issue #4 / issue #14): 写回 proxy.conf 与 dsh 主进程共用, 同步更新面板自身进程环境与 Git 代理
 function writeProxyConf(value) {
   const f = path.join(DATA_DIR, "dsh_home", "proxy.conf");
   let lines = [];
@@ -698,6 +717,17 @@ function writeProxyConf(value) {
   if (value) lines.push("PROXY=" + value);
   fs.mkdirSync(path.dirname(f), { recursive: true });
   fs.writeFileSync(f, lines.filter((l, i, a) => l !== "" || i < a.length - 1).join("\n").replace(/\n{3,}/g, "\n\n").trim() + "\n", { mode: 0o600 });
+
+  // 同步更新面板当前进程的 process.env 与 Git 全局配置 (issue #14)
+  if (value) {
+    for (const k of PROXY_KEYS) process.env[k] = value;
+    try { execFileSync("git", ["config", "--global", "http.proxy", value], { stdio: "ignore" }); } catch {}
+    try { execFileSync("git", ["config", "--global", "https.proxy", value], { stdio: "ignore" }); } catch {}
+  } else {
+    for (const k of PROXY_KEYS) delete process.env[k];
+    try { execFileSync("git", ["config", "--global", "--unset", "http.proxy"], { stdio: "ignore" }); } catch {}
+    try { execFileSync("git", ["config", "--global", "--unset", "https.proxy"], { stdio: "ignore" }); } catch {}
+  }
 }
 // pnpm 失败可读化 (issue #8 P1.2)
 function pnpmHint(errTail) {

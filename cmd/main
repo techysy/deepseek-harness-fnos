@@ -246,20 +246,22 @@ start_dsh() {
     if [ -n "${TRIM_PKGVAR:-}" ]; then
         mkdir -p "/home/${APP_NAME}" 2>/dev/null || true
     fi
-    # 网络代理: 默认不走代理. 仅当用户在 ${DSH_HOME}/proxy.conf 显式配置了 PROXY 才走代理.
+    # 网络代理 (issue #14): 存在 proxy.conf 时以文件为权威事实源, 不被常驻父进程旧环境覆盖.
     # (proxy.conf 始终在 @appdata 数据区, 不随工作空间迁移 — 属凭据类配置)
     # proxy.conf 内容示例:  PROXY=http://127.0.0.1:7890   (HTTP_PROXY/HTTPS_PROXY 都指向它)
-    if [ -z "${HTTP_PROXY:-}" ] && [ -z "${http_proxy:-}" ]; then
-        if [ -f "${DSH_HOME}/proxy.conf" ]; then
-            CFG_PROXY="$(grep -E '^PROXY=' "${DSH_HOME}/proxy.conf" | head -1 | cut -d= -f2-)"
-            if [ -n "${CFG_PROXY}" ]; then
-                export HTTP_PROXY="${CFG_PROXY}" HTTPS_PROXY="${CFG_PROXY}" http_proxy="${CFG_PROXY}" https_proxy="${CFG_PROXY}" ALL_PROXY="${CFG_PROXY}" all_proxy="${CFG_PROXY}"
-                git config --global http.proxy "${CFG_PROXY}" 2>/dev/null
-                git config --global https.proxy "${CFG_PROXY}" 2>/dev/null
-                log "network proxy from proxy.conf: ${CFG_PROXY}"
-            else
-                log "proxy.conf present but no PROXY= line; default no-proxy"
-            fi
+    if [ -f "${DSH_HOME}/proxy.conf" ]; then
+        CFG_PROXY="$(grep -E '^PROXY=' "${DSH_HOME}/proxy.conf" | head -1 | cut -d= -f2-)"
+        if [ -n "${CFG_PROXY}" ]; then
+            export HTTP_PROXY="${CFG_PROXY}" HTTPS_PROXY="${CFG_PROXY}" http_proxy="${CFG_PROXY}" https_proxy="${CFG_PROXY}" ALL_PROXY="${CFG_PROXY}" all_proxy="${CFG_PROXY}"
+            git config --global http.proxy "${CFG_PROXY}" 2>/dev/null || true
+            git config --global https.proxy "${CFG_PROXY}" 2>/dev/null || true
+            log "network proxy from proxy.conf: ${CFG_PROXY}"
+        else
+            # 清空代理: 显式 unset 父进程继承的代理变量, 并清理 Git 全局代理 (避免走旧失效代理)
+            unset HTTP_PROXY HTTPS_PROXY http_proxy https_proxy ALL_PROXY all_proxy
+            git config --global --unset http.proxy 2>/dev/null || true
+            git config --global --unset https.proxy 2>/dev/null || true
+            log "network proxy: proxy.conf is empty, explicitly cleared proxy env & git config"
         fi
     fi
     # 工作区注册表路径修复: 老布局迁移到共享区后, storages/workspace.json 里的工作区
