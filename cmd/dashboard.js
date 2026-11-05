@@ -756,7 +756,9 @@ function sudoRules() {
 }
 function ruleCovers(out, cmd, probe) {
   if (!out) return false;
-  for (const chunk of out.split(/NOPASSWD:/i).slice(1)) {
+  // sudo -l 长规则输出时会自动折行(换行+空格缩进), 必须先将延续行合并回单行, 否则路径被截断到下一行导致误判未授权
+  const unwrapOut = out.replace(/\n\s+/g, " ");
+  for (const chunk of unwrapOut.split(/NOPASSWD:/i).slice(1)) {
     for (const entry of chunk.split(/[,\n]/)) {
       const seg = entry.trim();
       if (!seg.includes(cmd)) continue;

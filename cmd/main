@@ -775,7 +775,18 @@ restart_dashboard() {
     if port_busy "${DASH_PORT}"; then
         log "dashboard: 端口 ${DASH_PORT} 等待超时, 仍尝试启动"
     fi
-    start_dashboard
+    # 属主保障 (sudo 授权探测依赖 dsh 身份): root 调用 restart-dashboard 时,
+    # 若直接 _spawn_dashboard 会以 root 拉起面板 → 面板 sudo -l 探测到的是 root
+    # 自己的规则, 授权状态全部误判为"未授权", 且数据区文件属主被污染.
+    # 与 hot-apply 的 _hot_start 保持一致: root 下以 dsh 身份重新进入启动流程.
+    if [ "$(id -u)" -eq 0 ] && id dsh >/dev/null 2>&1; then
+        local su_out="" su_rc=0
+        su_out="$(su -s /bin/bash dsh -c "${CMD_DIR}/main start-dashboard" 2>&1)" || su_rc=$?
+        [ -n "${su_out}" ] && log "dashboard: ${su_out}"
+        [ "${su_rc}" -ne 0 ] && log "dashboard: WARN 以 dsh 身份启动失败 rc=${su_rc}"
+    else
+        start_dashboard
+    fi
     # 启动确认: 等面板写出 pid 且进程存活 (面板起来后自行落 pid, 比 $! 更可信)
     local j=0
     while [ "${j}" -lt 20 ]; do
@@ -965,7 +976,8 @@ case "${1:-}" in
     stop) stop ;;
     status) status ;;
     restart) stop; sleep 1; start ;;
+    start-dashboard) start_dashboard ;;
     restart-dashboard) restart_dashboard ;;
     hot-apply) shift; hot_apply "$@" ;;
-    *) echo "usage: $0 {start|stop|status|restart|restart-dashboard|hot-apply <fpk>}"; exit 1 ;;
+    *) echo "usage: $0 {start|stop|status|restart|start-dashboard|restart-dashboard|hot-apply <fpk>}"; exit 1 ;;
 esac
