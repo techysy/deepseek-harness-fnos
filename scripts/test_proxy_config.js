@@ -35,12 +35,13 @@ async function waitUntil(check) {
 async function run() {
   // Execute the actual startup proxy block with isolated, real Git configuration.
   const main = fs.readFileSync(path.join(repo, "cmd/main"), "utf8");
-  const block = main.slice(main.indexOf("    # 网络代理:"), main.indexOf("    # 工作区注册表路径修复:"));
+  const block = main.slice(main.indexOf("    # 网络代理"), main.indexOf("    # 工作区注册表路径修复:"));
   assert(block.includes("CFG_PROXY"));
   const gitConfig = path.join(dshHome, ".gitconfig");
   for (const value of [undefined, `PROXY=${newProxy}\n`, "", "PROXY=\n", "# direct\n"]) {
     if (value === undefined) { if (fs.existsSync(config)) fs.unlinkSync(config); } else fs.writeFileSync(config, value);
-    fs.writeFileSync(gitConfig, `[http]\n\tproxy = ${oldProxy}\n[https]\n\tproxy = ${oldProxy}\n[user]\n\tname = fixture\n`);
+    const duplicates = value !== undefined && !value.includes(newProxy) ? `\n\tproxy = ${newProxy}` : "";
+    fs.writeFileSync(gitConfig, `[http]\n\tproxy = ${oldProxy}${duplicates}\n[https]\n\tproxy = ${oldProxy}${duplicates}\n[user]\n\tname = fixture\n`);
     const result = spawnSync("bash", ["-c", 'log() { :; };\n' + block + '\nnode "$CAPTURE_HELPER"'], { env: { ...env, GIT_CONFIG_GLOBAL: gitConfig }, encoding: "utf8" });
     assert.equal(result.status, 0, result.stderr);
     const actual = JSON.parse(fs.readFileSync(capture, "utf8").trim().split("\n").pop());
@@ -51,7 +52,7 @@ async function run() {
     assert(fs.readFileSync(gitConfig, "utf8").includes("name = fixture"));
   }
   fs.writeFileSync(capture, "");
-  fs.writeFileSync(gitConfig, `[http]\n\tproxy = ${oldProxy}\n[https]\n\tproxy = ${oldProxy}\n[user]\n\tname = fixture\n`);
+  fs.writeFileSync(gitConfig, `[http]\n\tproxy = ${oldProxy}\n\tproxy = ${oldProxy}\n[https]\n\tproxy = ${oldProxy}\n\tproxy = ${oldProxy}\n[user]\n\tname = fixture\n`);
   if (fs.existsSync(config)) fs.unlinkSync(config);
   const listener = net.createServer(); listener.listen(0, "127.0.0.1"); await once(listener, "listening");
   const port = listener.address().port; await new Promise(resolve => listener.close(resolve));

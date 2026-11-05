@@ -14,6 +14,7 @@
 "use strict";
 const http = require("http");
 const https = require("https");
+const tls = require("tls");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
@@ -181,7 +182,7 @@ function humanSize(n) {
 // ---- 出站代理 (issue #4): 与 dsh 主进程共用 proxy.conf (PROXY=http://IP:PORT),
 // 面板对 GitHub/Gitee 的 API 探测与 fpk 下载经 HTTP 代理 CONNECT 隧道转发.
 // 仅代理公网地址; 回环/局域网直连, 不影响健康检查与 NAS 内部通信.
-const PROXY_ENV_NAMES = ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"];
+const PROXY_KEYS = ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"];
 function readProxyConf() {
   try {
     const f = path.join(DATA_DIR, "dsh_home", "proxy.conf");
@@ -195,7 +196,7 @@ function proxyEnvironment() {
   const env = { ...process.env };
   if (!fs.existsSync(path.join(DATA_DIR, "dsh_home", "proxy.conf"))) return env;
   const proxy = readProxyConf();
-  for (const name of PROXY_ENV_NAMES) {
+  for (const name of PROXY_KEYS) {
     if (proxy) env[name] = proxy;
     else delete env[name];
   }
@@ -228,9 +229,17 @@ async function makeRequest(url, options = {}) {
   const proxy = readProxyConf();
   const port = Number(u.port) || (u.protocol === "https:" ? 443 : 80);
   if (proxy && needsProxy(u.hostname)) {
-    const socket = await proxyConnect(proxy, u.hostname, port, options.timeout || 15000);
-    const mod = u.protocol === "https:" ? https : http;
-    return mod.request(url, { ...options, agent: false, createConnection: () => socket });
+    const rawSocket = await proxyConnect(proxy, u.hostname, port, options.timeout || 15000);
+    if (u.protocol === "https:") {
+      // 关键修复: HTTP CONNECT 建立明文 TCP 隧道后, HTTPS 必须经由 tls.connect 完成 TLS 握手
+      // (此前将 rawSocket 直传给 https.request 导致明文 HTTP 打入 443 端口被挂断，走代理下载全失败)
+      const tlsSocket = tls.connect({
+        socket: rawSocket,
+        servername: u.hostname,
+      });
+      return https.request(url, { ...options, agent: false, createConnection: () => tlsSocket });
+    }
+    return http.request(url, { ...options, agent: false, createConnection: () => rawSocket });
   }
   const mod = u.protocol === "https:" ? https : http;
   return mod.request(url, options);
@@ -453,10 +462,16 @@ function uploadFpk(req, res, dir) {
       out.close(() => {
         if (overflow) return;
         if (!received) return done({ ok: false, code: 400, err: "文件为空" });
-        // fpk 是 zip 容器: 校验魔数, 防止误传其他文件
+        // fpk 是 gzip (tar.gz) 容器或 zip 容器: 校验魔数 (0x1f,0x8b 或 0x50,0x4b), 防止误传其他文件
         let magicOk = false;
-        try { const fd = fs.openSync(tmp, "r"); const b = Buffer.alloc(4); fs.readSync(fd, b, 0, 4, 0); fs.closeSync(fd); magicOk = b[0] === 0x50 && b[1] === 0x4b; } catch {}
-        if (!magicOk) return done({ ok: false, code: 400, err: "不是有效的 fpk (zip) 文件" });
+        try {
+          const fd = fs.openSync(tmp, "r");
+          const b = Buffer.alloc(4);
+          fs.readSync(fd, b, 0, 4, 0);
+          fs.closeSync(fd);
+          magicOk = (b[0] === 0x1f && b[1] === 0x8b) || (b[0] === 0x50 && b[1] === 0x4b);
+        } catch {}
+        if (!magicOk) return done({ ok: false, code: 400, err: "不是有效的 fpk 归档文件" });
         try { fs.renameSync(tmp, dest); } catch (e) { return done({ ok: false, code: 500, err: "保存失败: " + (e.message || e) }); }
         done({ ok: true, code: 200, name, size: received });
       });
@@ -465,7 +480,8 @@ function uploadFpk(req, res, dir) {
   });
 }
 // 面板子进程所需的完整环境: cmd/main 依赖 TRIM_PKGVAR 推导 DATA_DIR, 面板可能是被
-// 显式 DATA_DIR 启动而未继承, 统一在这里补齐, 避免子进程写到错误路径
+// 显式 DATA_DIR 启动而未继承, 统一在这里补齐, 避免子进程写到错误路径.
+// 同时严格以最新的 proxy.conf 为准同步代理变量 (issue #14: 清空代理后不继承旧代理环境变量).
 function childEnv() {
   const env = { ...proxyEnvironment(), DATA_DIR, DSH_HOME, APP_DIR, CMD_MAIN, DASH_PORT: String(DASH_PORT) };
   if (!env.TRIM_PKGVAR && DATA_DIR) env.TRIM_PKGVAR = DATA_DIR;
@@ -695,7 +711,7 @@ function updateHotApply(name) {
   child.unref();
   return { ok: true, dispatched: true, file };
 }
-// 代理设置 (issue #4): 写回 proxy.conf 与 dsh 主进程共用 (重启后 dsh 也走代理)
+// 代理设置 (issue #4 / issue #14): 写回 proxy.conf 与 dsh 主进程共用, 同步更新面板自身进程环境与 Git 代理
 function writeProxyConf(value) {
   const f = path.join(DATA_DIR, "dsh_home", "proxy.conf");
   let lines = [];
@@ -705,7 +721,7 @@ function writeProxyConf(value) {
   fs.mkdirSync(path.dirname(f), { recursive: true });
   fs.writeFileSync(f, lines.filter((l, i, a) => l !== "" || i < a.length - 1).join("\n").replace(/\n{3,}/g, "\n\n").trim() + "\n", { mode: 0o600 });
   const env = proxyEnvironment();
-  for (const name of PROXY_ENV_NAMES) {
+  for (const name of PROXY_KEYS) {
     if (env[name] === undefined) delete process.env[name];
     else process.env[name] = env[name];
   }
