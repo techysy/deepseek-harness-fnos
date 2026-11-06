@@ -361,25 +361,20 @@ bash scripts/package-arm-offline.sh node_modules-arm64-<sha>.tar.gz  # ARM：用
 
 ## 贡献者致谢
 
-**多次反馈 / 代码合入的官方贡献者：**
-
 <p>
   <a href="https://github.com/techysy" title="techysy — 主要维护者"><img src="https://github.com/techysy.png?size=80" width="48" height="48" alt="techysy" /></a>
   <a href="https://github.com/Solismuchengxue" title="Solismuchengxue (曹政) — 累计 3 个 issue（#9 图片输入 EACCES 根因修复 · #10 重启按钮 · #16 sudo 授权折行误判定位）"><img src="https://github.com/Solismuchengxue.png?size=80" width="48" height="48" alt="Solismuchengxue" /></a>
   <a href="https://github.com/cygnushan" title="cygnushan — #14 代理残留根因定位与真机验证 + PR #15"><img src="https://github.com/cygnushan.png?size=80" width="48" height="48" alt="cygnushan" /></a>
   <a href="https://github.com/xiehuc" title="xiehuc — #5 反馈定位 + PR #6 cordis.patch.yml 幂等保留方案（主线等价实现）"><img src="https://github.com/xiehuc.png?size=80" width="48" height="48" alt="xiehuc" /></a>
+  <a href="https://github.com/taorliu" title="taorliu — #11 下载卡死行号定位与补丁（方案全量采纳）"><img src="https://github.com/taorliu.png?size=80" width="48" height="48" alt="taorliu" /></a>
+  <a href="https://github.com/Snowkei" title="Snowkei — #13 插件卡片 UI 对齐建议"><img src="https://github.com/Snowkei.png?size=80" width="48" height="48" alt="Snowkei" /></a>
+  <a href="https://github.com/wjyspace" title="wjyspace — #12 插件市场反馈"><img src="https://github.com/wjyspace.png?size=80" width="48" height="48" alt="wjyspace" /></a>
+  <a href="https://github.com/fffy520" title="fffy520 — #2 工作区落共享目录建议"><img src="https://github.com/fffy520.png?size=80" width="48" height="48" alt="fffy520" /></a>
+  <a href="https://github.com/wendellace" title="wendellace — #3 prefix 路由 400 反馈"><img src="https://github.com/wendellace.png?size=80" width="48" height="48" alt="wendellace" /></a>
+  <a href="https://github.com/ayscb" title="ayscb — #7 5ddd 域名反馈"><img src="https://github.com/ayscb.png?size=80" width="48" height="48" alt="ayscb" /></a>
 </p>
 
-**单次反馈（issue / PR）：**
-
-- [taorliu](https://github.com/taorliu) — #11 下载卡死行号定位与补丁（方案全量采纳）
-- [Snowkei](https://github.com/Snowkei) — #13 插件卡片 UI 对齐建议
-- [wjyspace](https://github.com/wjyspace) — #12 插件市场反馈
-- [fffy520](https://github.com/fffy520) — #2 工作区落共享目录建议
-- [wendellace](https://github.com/wendellace) — #3 prefix 路由 400 反馈
-- [ayscb](https://github.com/ayscb) — #7 5ddd 域名反馈
-
-<sub>多次反馈/代码合入进致谢墙，单次反馈列入名单；若有遗漏请随时提 issue 补充。</sub>
+<sub>名单由 issue 与 PR 的反馈者汇总，头像取自 GitHub 公开个人信息；PR 合入者另见 GitHub Contributors 统计；若有遗漏请随时提 issue 补充。</sub>
 
 ## 许可证
 
