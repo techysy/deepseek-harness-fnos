@@ -182,6 +182,16 @@ sudo chmod 440 /etc/sudoers.d/dsh-hotfix
 - 也可在 dsh 设置页内直接配置官方 / 自定义提供方的 API Key（改后重启应用生效）
 - 应用设置页不含 API Key 字段；`.env` 权限每次启动自动修正为 600
 
+### 账号登录（dsh 界面左下角）
+
+dsh 左下角的「登录」走 OAuth 授权，**仅当浏览器地址是 `http://localhost:<端口>` 时可用**——从 `http://NAS_IP:28000`、统一网关或 FN Connect 打开时点击必报「登录失败 · 操作未完成，请重试」（上游 `loginOrigin()` 白名单 + DeepSeek 平台只收回环 redirect_uri，补丁无法绕过）。NAS 上的登录方法——电脑上建一次 SSH 隧道：
+
+```bash
+ssh -L 28000:127.0.0.1:28000 <fnOS用户名>@<NAS_IP>
+```
+
+然后浏览器打开 `http://localhost:28000` 点「登录」，完成平台授权后即可关掉隧道。凭据存在 NAS 数据区，**之后所有设备经任意入口访问都是登录态**；`localhost` 属安全上下文，语音输入的麦克风限制也顺带解除。没有 SSH 条件可改用上方 API Key 或弹窗里的「添加 API Key」。详见 [账号登录指南](docs/dsh-account-login.md)。
+
 ### 网络代理（可选）
 
 在安装向导或应用设置页填写代理 IP + 端口，写入 `dsh_home/proxy.conf`：
