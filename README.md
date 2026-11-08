@@ -343,12 +343,14 @@ bash scripts/package-arm-offline.sh node_modules-arm64-<sha>.tar.gz  # ARM：用
 - [dsh Node.js 自托管](docs/dsh-nodejs.md) — node / npm 基础接入
 - [dsh Agent 命令兼容矩阵](docs/dsh-nodejs-commands.md) — node / npm / npx / pnpm / yarn / bun / corepack 完整命令与数据区配置
 - [语音输入插件兼容指南](docs/dsh-voice-input.md) — 官方 SenseVoice 语音输入安装、模型代理 / 离线部署、麦克风安全上下文与局域网方案
+- [账号登录指南](docs/dsh-account-login.md) — 左下角「登录」在 NAS 地址下失败的原因（上游仅接受 localhost 回调）与 SSH 隧道 / API Key 两种解法
 
 ## 已知限制
 
 - 28000 / 28001 除信任围栏外没有登录鉴权（浏览器 token 鉴权已被补丁关闭），只适合局域网 / FN Connect 使用，请勿直接暴露到公网
 - 语音输入插件在**局域网 HTTP 直连**时无法录音 —— 浏览器只在 HTTPS / localhost 开放麦克风（与封装无关的安全上下文限制，FN Connect 外网 HTTPS 不受影响）；局域网方案见 [语音输入插件兼容指南](docs/dsh-voice-input.md)
 - fnOS 统一网关 `/app/dsh` 需 fnOS 登录会话（`0.2.0-rc.2.2` 起打通）；更早版本的 fpk 请用 28000 直连或 FN Connect 访问
+- 账号登录（dsh 界面左下角「登录」）在 `http://NAS_IP:28000` / 网关 / FN Connect 地址下**必然失败**（提示「登录失败 · 操作未完成，请重试」）——上游 OAuth 仅接受浏览器地址为 `http://localhost:<端口>` 的回调，且 DeepSeek 平台侧同样只收回环 redirect_uri（实测非回环返回 50005），补丁无法绕过。用 SSH 隧道登录一次即可（凭据存 NAS，之后所有设备共用），步骤见 [账号登录指南](docs/dsh-account-login.md)；无 SSH 条件可改用「添加 API Key」
 - 上游仍是开发者预览版（`-rc`），本地补丁依赖上游代码的特定写法，上游改动后可能失效，需按检查清单核对
 - `v0.1.7-rc.2` 及更早的 fpk 中，Web 侧边栏终端可能因服务账号登录 shell 为 `nologin` 而打开即退出（提示 `This account is currently not available.`）；0.2.0-rc.2 起安装脚本自动修正，老版本可手动执行 `sudo usermod -s /bin/bash dsh`
 - 桌面打开出现 `dsh web authentication required` 401（启动补丁在个别环境没打上）时，SSH 到 NAS 执行热修脚本后在应用中心重启 dsh：
