@@ -1,5 +1,35 @@
 # CHANGELOG
 
+## 🚀 0.2.2-rc.2 (2026-11-13)
+
+> 升级上游 `@deepseek-ai/dsh` 至 **0.2.2-rc.2**，版本号严格对齐上游，无本地功能改动。
+
+### 上游主要更新（节选，完整见[上游 Release](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2)）
+
+- **SubAgent 具名与多层协作**：AgentTeam 可按会话开启，共用成员与任务面板
+- **Git Worktree 审阅增强**：按分支、提交和文件类型审阅改动，直接处理 GitHub 评审、同步已审阅进度和更新分支
+- **API Key 掩码管理**：已保存密钥以掩码显示，支持整体替换或清除，不显示完整旧密钥
+- **模型请求失败重试设置**：可选重试条件、次数和等待时间；临时请求失败可直接「继续生成」
+- **侧栏文件搜索**：按名称或路径查找，可调整排除规则与隐藏文件显示
+- **稳定性关键修复**：可选插件加载失败不再拖垮整个 Web 页面（此前跨版本升级第三方插件不兼容会导致崩溃循环，本版大幅缓解）；另有文件树特殊文件名崩溃、聊天更新卡住、消息重复提交、停止任务资源提前释放等修复
+- 界面体验：菜单定位重做、暗色模式浮层、侧栏长列表滚动、消息上下文提示、会话首页动画等多处优化
+
+### 本地补丁兼容性（升级前预验证）
+
+5 处本地补丁的锚点已在 rc.2 npm 包上逐个核对，全部兼容：
+
+| 补丁 | rc.2 状态 |
+| --- | --- |
+| settings host-mode（构建期） | 上游 0.2.1+ 已重构移除 isLoopback 限制、原生放行非回环；补丁脚本写 native 标记通过 |
+| crypto.randomUUID polyfill（构建期） | 注入成功 |
+| 特权 API fence `[]` 钉扎（运行时） | 上游已原生 `trustedHosts`，补丁自动跳过 |
+| 浏览器 401 放行（运行时） | 上游 `isAuthenticated` 签名新增 `secure` 参数，`cmd/main` 的 `old4b` 新签名锚点命中 |
+| 附件 EACCES 权限隔离（运行时，#9） | `ensureDurableDirectory(home, parse(home).root)` 锚点命中 |
+
+### 相关
+
+- 账号登录（左下角「登录」）限制与解法见 [docs/dsh-account-login.md](docs/dsh-account-login.md)（#17）
+
 ## 🚀 0.2.2-rc.1 (2026-11-05)
 
 > 升级上游 `@deepseek-ai/dsh` 至 **0.2.2-rc.1**（0.2.2 系列首个 RC，大版本）。
