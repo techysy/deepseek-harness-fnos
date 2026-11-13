@@ -777,13 +777,24 @@ function ruleCovers(out, cmd, probe) {
   }
   return false;
 }
+function sudoMayRun(argv) {
+  // sudo -n -l <args>: NOPASSWD 放行时退出码 0, 未授权/需密码时非 0 — 直接验证,
+  // 不受 sudo -l 显示格式影响 (0.2.2-rc.2 实测长规则会从 token 中间折行)
+  const r = spawnSync("sudo", ["-n", "-l", ...argv], { encoding: "utf8", timeout: 5000 });
+  return !r.error && r.status === 0;
+}
 function sudoAuthStatus() {
   const dir = selectedUpdateDir();
   const files = updateFiles();
   const probe = path.join(dir, files.map(f => f.name).sort().pop() || "probe.fpk");
   const out = sudoRules();
-  const install = ruleCovers(out, "install-fpk", probe);
-  const hot = ruleCovers(out, "hot-apply", probe);
+  let install = ruleCovers(out, "install-fpk", probe);
+  let hot = ruleCovers(out, "hot-apply", probe);
+  // 兜底探测: sudo -l 的长规则输出会从 token 中间折行 (实测 `hot-apply` 被切成 ho / t-apply 两行),
+  // 折行合并 (\n\s+ → 空格) 只能处理 token 边界折行, 词中切断会在 token 里插入空格 → 文本解析
+  // 误判未授权. 文本解析命中时跳过探测 (轮询零额外开销), 未命中时用退出码探测兜底.
+  if (!install) install = sudoMayRun(["/usr/local/bin/appcenter-cli", "install-fpk", probe]);
+  if (!hot) hot = sudoMayRun([CMD_MAIN, "hot-apply", probe]);
   return { install, hot, authorized: install && hot };
 }
 function sudoAuthorized(cmd = "install-fpk") {
@@ -1218,6 +1229,19 @@ localStorage.setItem(KEY,d.fpkVersion);
 let dlPoll=null;
 let SUDO_CMD="";
 
+async function recheckSudo(btn){
+  // 「重新检测」按钮: 带加载态与结果反馈 — 此前 onclick 直接复用 loadVersion() 整页重渲染,
+  // 按钮无任何响应表现, 用户无法确认点击生效 (issue #17 反馈)
+  if(btn){btn.disabled=true;const old=btn.querySelector("span");const oldTxt=old?old.textContent:"";if(old)old.textContent=t("loading")}
+  const st=await api("/api/update/state");
+  if(btn){btn.disabled=false;const sp=btn.querySelector("span");if(sp)sp.textContent=t("sudoRecheck")}
+  if(!st) return;
+  // 重渲染授权卡片与徽标 (复用 loadVersion 的整卡渲染, 顺带刷新版本信息)
+  await loadVersion();
+  if(st.authorized) toast(t("sudoAuthorized"));
+  else if(st.install||st.hot) toast(t("sudoPartialTip").replace("{cmds}",[!st.install?t("cmdInstall"):"",!st.hot?t("cmdHot"):""].filter(Boolean).join("、")),1);
+  else toast(t("sudoNotAuthorized"),1);
+}
 async function loadVersion(){const d=await api("/api/version");if(!d)return;
 let up="";
 if(d.upstreamDsh){
@@ -1255,7 +1279,7 @@ if(st){
     '<div class="sudo-cmd mono">'+esc(st.sudoHint||"")+'</div>'+
     '<div class="sudo-foot"><span class="hint">'+t("sudoFoot")+'</span>'+
     '<button class="btn primary" onclick="copyText(SUDO_CMD,this)">'+svg(ICONS.copy)+"<span>"+t("copy")+"</span></button>"+
-    '<button class="btn" onclick="loadVersion()">'+svg(ICONS.refresh)+"<span>"+t("sudoRecheck")+"</span></button></div>"+
+    '<button class="btn" onclick="recheckSudo(this)">'+svg(ICONS.refresh)+"<span>"+t("sudoRecheck")+"</span></button></div>"+
     '</div>';
   const files=st.files||[];
   // 下载目录 (issue #4): 默认 + fnOS 官方授权目录 (应用设置 → 授权目录)
