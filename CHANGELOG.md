@@ -11,6 +11,7 @@
 - **日志默认显示最底部**：首次加载自动滚到最新；自动刷新时用户上翻则保持位置不打断。
 - **标准安装静默跳过 → 引导弹窗改走热安装**：fnOS 应用中心对 rc 预发布号（rc.1 → rc.2）会把标准安装判为「已安装」直接跳过（版本不变、进程不重启、无任何报错）。后端在安装派发后轮询版本 90s，检测到未变化时前端弹窗引导改用「强制覆盖热安装」，一键接管。
 - **下载尺寸动态显示**：「GitHub 直链」旁的包体积从硬编码 `约 165MB` 改为从 Release 资产实时读取（当前实际 219MB）。
+- **修复英文提示内嵌引号转义回归 → 整页 SyntaxError (#18)**：感谢 [Solismuchengxue](https://github.com/Solismuchengxue) 精准定位。面板 i18n 英文 `applySkipMsg` 内嵌双引号经 `HTML_TMPL` 模板字面量消耗一层转义后，浏览器收到裸引号提前终结字符串 → 整个内联脚本 `Unexpected identifier 'already'`，面板停占位骨架（无论界面语言）。修复：内层引用改单引号；并按反馈者建议**新增 `scripts/verify-inline-js.js`**（求值模板 → `vm.Script` 校验渲染后的浏览器脚本），已挂入打包工作流硬校验，"服务端可解析但渲染产物语法错误"的问题今后到不了 Release。
 
 ### 上游主要更新（节选，完整见[上游 Release](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2)）
 
