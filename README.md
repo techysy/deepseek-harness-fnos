@@ -375,7 +375,7 @@ bash scripts/package-arm-offline.sh node_modules-arm64-<sha>.tar.gz  # ARM：用
 
 <p>
   <a href="https://github.com/techysy" title="techysy — 主要维护者"><img src="https://github.com/techysy.png?size=160" width="80" height="80" alt="techysy" /></a>
-  <a href="https://github.com/Solismuchengxue" title="Solismuchengxue (曹政) — 累计 3 个 issue（#9 图片输入 EACCES 根因修复 · #10 重启按钮 · #16 sudo 授权折行误判定位）"><img src="https://github.com/Solismuchengxue.png?size=160" width="80" height="80" alt="Solismuchengxue" /></a>
+  <a href="https://github.com/Solismuchengxue" title="Solismuchengxue (曹政) — 累计 4 个 issue（#9 图片输入 EACCES 根因修复 · #10 重启按钮 · #16 sudo 授权折行误判定位 · #18 面板转义回归定位 + 渲染产物校验建议被采纳）"><img src="https://github.com/Solismuchengxue.png?size=160" width="80" height="80" alt="Solismuchengxue" /></a>
   <a href="https://github.com/cygnushan" title="cygnushan — #14 代理残留根因定位与真机验证 + PR #15"><img src="https://github.com/cygnushan.png?size=160" width="80" height="80" alt="cygnushan" /></a>
   <a href="https://github.com/xiehuc" title="xiehuc — #5 反馈定位 + PR #6 cordis.patch.yml 幂等保留方案（主线等价实现）"><img src="https://github.com/xiehuc.png?size=160" width="80" height="80" alt="xiehuc" /></a>
   <a href="https://github.com/taorliu" title="taorliu — #11 下载卡死行号定位与补丁（方案全量采纳）"><img src="https://github.com/taorliu.png?size=160" width="80" height="80" alt="taorliu" /></a>
