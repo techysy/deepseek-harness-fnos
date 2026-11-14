@@ -119,6 +119,13 @@ jobs:
             app/server/node_modules/@deepseek-ai/dsh-client-ui-settings-models/lib/client.js 2>/dev/null | wc -l)
           [ "${HITS}" -ge 1 ] || { echo "ERROR: settings 补丁未命中 (上游代码结构可能已变化)"; exit 1; }
 
+      # ── 面板内联脚本语法校验 (issue #18) ─────────────────────────────────
+      # dashboard.js 的 HTML_TMPL 是 Node 模板字面量, 会消耗一层转义 — 服务端
+      # node --check 通过不代表渲染出的浏览器脚本可解析 (0.2.2-rc.2 曾因 i18n
+      # 内嵌引号整页 SyntaxError 停占位). 打包前硬校验, 错误即构建失败.
+      - name: 校验面板内联脚本语法
+        run: node scripts/verify-inline-js.js cmd/dashboard.js
+
       # ── 下载 fnpack ───────────────────────────────────────────────────
       - name: 下载 fnpack (飞牛官方打包工具)
         env:
