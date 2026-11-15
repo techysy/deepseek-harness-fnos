@@ -466,7 +466,9 @@ if changed:
     open(p, "w", encoding="utf-8").write(s)
     print("privileged-fence patched" if new1 in s or new2 in s else "privileged-fence already patched", end="")
     print(" + browser-auth bypassed" if (new4 in s or new4b in s) else " + browser-auth patch FAILED (pattern mismatch)")
-elif "isTrustedApiRequest(request, this.trustedHosts)" in s or "isTrustedApiRequest(request, trustedHosts)" in s:
+elif "isTrustedApiRequest(request, this.trustedHosts)" in s \
+        or "isTrustedApiRequest(request, this.trustedHosts," in s \
+        or "isTrustedApiRequest(request, trustedHosts)" in s:
     print("privileged-fence native in upstream (>=0.1.2), no patch needed")
 else:
     print("privileged-fence already patched")
