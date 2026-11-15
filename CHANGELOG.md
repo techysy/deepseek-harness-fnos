@@ -1,5 +1,34 @@
 # CHANGELOG
 
+## 🚀 0.2.2-rc.3 (2026-11-16)
+
+> 升级上游 `@deepseek-ai/dsh` 至 **0.2.2-rc.3**（上游 2026-11-13 发布），版本号严格对齐上游。上游本版为小步迭代：一项实验性新功能 + 一项 Windows 桌面端修复。
+
+### 上游主要更新（完整见[上游 Release](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.3)）
+
+- **实验性 DeepSeek 会话导入插件**：新增 `@deepseek-ai/dsh-deepseek-chat-import`，把 DeepSeek App / 网页版的历史会话导入指定工作区继续聊（by @imccyu）。该包随 dependencies 全量离线打包，装后可在面板「插件管理」看到
+- **Windows 桌面端修复**：应用内更新失败、更新后无法自动重开（by @winewill）
+- 依赖树变化：agent-team 包家族去 experimental 前缀改名（`dsh-experimental-agent-team` → `dsh-agent-team` 等），`dsh-office-to-pdf`、`dsh-deepseek-account-platform` 移除
+
+### 本地改动
+
+- **`cmd/main` 特权 fence「上游已原生修复」检测串适配 rc.3**：原生调用升级为 4 参 `isTrustedApiRequest(request, trustedHosts, bindHost, protocol)`（新增监听绑定地址放行），旧检测串（带右括号）失配 → app.log 会误报 "already patched"。检测串放宽后日志恢复准确（仅诊断措辞，不影响任何实际行为）
+- **`app/server/package-lock.json` 首次对齐上游版本**：此前停留在 0.1.x 时代的 rc.1，本次按 rc.3 真实依赖树重新生成，全部 resolved URL 锁 registry.npmjs.org（CI 用 `npm install` 不受影响，仅消除隐患）
+
+### 本地补丁兼容性（升级前预验证）
+
+5 处本地补丁的锚点已在 rc.3 npm 包全量依赖树上逐个核对，全部兼容：
+
+| 补丁 | rc.3 状态 |
+| --- | --- |
+| settings host-mode（构建期） | 上游 0.2.1+ 原生架构不变（`SettingsDescribeMirror` 命中、isLoopback 三元已无）→ patch 脚本写 native 标记通过 |
+| crypto.randomUUID polyfill（构建期） | `dsh-web-frontend/dist/index.html` 存在且零引用 randomUUID → 注入照常 |
+| 特权 API fence `[]` 钉扎（运行时） | 仍零钉扎无需补丁；围栏语义不变（Host 白名单 + sec-fetch-site + Origin 同源），另新增绑定地址放行 |
+| 浏览器 401 放行（运行时） | `isAuthenticated(request, secure = false)` old4b 锚点字节级精确命中 |
+| 附件 EACCES 权限隔离（运行时，#9） | `ensureDurableDirectory(home, parse(home).root)` 锚点命中 |
+
+另核对：`--trusted-host` variadic 仍在 `dsh-web-app/lib/startup.js`；全部 87 个 `@deepseek-ai/dsh-*` 子包钉在 0.2.2-rc.3。
+
 ## 🚀 0.2.2-rc.2 (2026-11-13)
 
 > 升级上游 `@deepseek-ai/dsh` 至 **0.2.2-rc.2**，版本号严格对齐上游。**发布当天面板追加了 4 处修复/改进（已重新打包覆盖 Release 资产，13:43 后下载的包均含）**，见下方「管理面板追加更新」。
