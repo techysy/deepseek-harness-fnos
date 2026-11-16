@@ -237,6 +237,12 @@ jobs:
             "dsh-${VERSION}-${{ inputs.arch }}.fpk" \
             "dsh-${VERSION}-iframe-${{ inputs.arch }}.fpk" \
             "${{ env.DASH_FPK }}"
+          # 门禁: 正式 notes 发布后 body 必须带 Full Changelog (compare 链接) --
+          # 历史上手写 notes 覆盖 generate-notes 占位时曾把它丢掉 (全部 release 补过一轮)
+          BODY="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body --jq '.body')"
+          if ! grep -q "Full Changelog" <<<"$BODY"; then
+            echo "WARN: Release $TAG 的 body 缺 Full Changelog 链接 (compare/commits) -- 发布者整理 notes 时请保留" >> "$GITHUB_STEP_SUMMARY"
+          fi
           echo "## 📦 已自动上传 Release 资产 → \`$TAG\` (${{ inputs.arch }} + ${{ env.DASH_NAME }})" >> "$GITHUB_STEP_SUMMARY"
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name'
 
