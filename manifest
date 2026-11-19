@@ -1,8 +1,8 @@
 appname               = dsh
-version               = 0.2.2-rc.3
+version               = 0.2.2-rc.5
 display_name          = DeepSeek Harness
-desc                  = DeepSeek Harness 自托管版 — 基于 @deepseek-ai/dsh v0.2.2-rc.3，离线打包，局域网直连 NAS_IP:28000，管理面板 :28001
-changelog             = v0.2.2-rc.3: 升级上游 0.2.2-rc.3（新增实验性 DeepSeek 会话导入插件 — 把 DeepSeek App/网页版历史会话导入工作区继续聊；Windows 桌面端应用内更新失败与无法自动重开修复）
+desc                  = DeepSeek Harness 自托管版 — 基于 @deepseek-ai/dsh v0.2.2-rc.5，离线打包，局域网直连 NAS_IP:28000，管理面板 :28001
+changelog             = v0.2.2-rc.5: 升级上游 0.2.2-rc.5（DeepSeek 模型改用服务端搜索、不按次收费；模型请求异常响应优化；LiveShare 桌面端分享修复）
 platform              = x86
 source                = thirdparty
 maintainer            = deepseek-ai

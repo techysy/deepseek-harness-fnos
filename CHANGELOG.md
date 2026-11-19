@@ -1,5 +1,27 @@
 # CHANGELOG
 
+## 🚀 0.2.2-rc.5 (2026-11-19)
+
+> 升级上游 `@deepseek-ai/dsh` 至 **0.2.2-rc.5**，版本号严格对齐上游，无本地功能改动。
+
+### 上游更新（rc.3 → rc.4 → rc.5，完整见[上游 Release](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.5)）
+
+- **DeepSeek 服务端搜索**：DeepSeek 模型改用服务端搜索，搜索不按次收费；其他模型默认使用 DeepSeek Search API（rc.5）
+- **模型请求异常响应优化**（rc.4）
+- **LiveShare 桌面端分享修复**（rc.4）
+
+### 本地补丁兼容性（升级前预验证）
+
+5 处补丁锚点已在 rc.5 npm 包上核对，与 rc.3 形态一致全部兼容：
+
+| 补丁 | rc.5 状态 |
+| --- | --- |
+| settings host-mode（构建期） | 上游原生支持（`SettingsDescribeMirror` 命中），脚本写 native 标记通过 |
+| crypto.randomUUID polyfill（构建期） | 注入成功 |
+| 特权 API fence（运行时） | 上游原生 `trustedHosts`（4 参签名与 rc.3 相同），无 `[]` 残留，补丁自动跳过 |
+| 浏览器 401 放行（运行时） | `old4b` 新签名锚点命中 |
+| 附件 EACCES 权限隔离（运行时，#9） | `ensureDurableDirectory(home, parse(home).root)` 锚点命中 |
+
 ## 🚀 0.2.2-rc.3 (2026-11-16)
 
 > 升级上游 `@deepseek-ai/dsh` 至 **0.2.2-rc.3**（上游 2026-11-13 发布），版本号严格对齐上游。上游本版为小步迭代：一项实验性新功能 + 一项 Windows 桌面端修复。
